@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7C6BC91E301FEB1E00280B69 /* PartCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC91C301FEB1E00280B69 /* PartCatalog.swift */; };
+		7C6BC91F301FEB1E00280B69 /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC91D301FEB1E00280B69 /* Part.swift */; };
 		7C8CEA74301FDC2300BE1D20 /* RigShopApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C8CEA73301FDC2300BE1D20 /* RigShopApp.swift */; };
 		7C8CEA76301FDC2300BE1D20 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C8CEA75301FDC2300BE1D20 /* ContentView.swift */; };
 		7C8CEA78301FDC2A00BE1D20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CEA77301FDC2A00BE1D20 /* Assets.xcassets */; };
@@ -34,6 +36,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		7C6BC91C301FEB1E00280B69 /* PartCatalog.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartCatalog.swift; sourceTree = "<group>"; };
+		7C6BC91D301FEB1E00280B69 /* Part.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Part.swift; sourceTree = "<group>"; };
 		7C8CEA70301FDC2300BE1D20 /* RigShop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RigShop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C8CEA73301FDC2300BE1D20 /* RigShopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RigShopApp.swift; sourceTree = "<group>"; };
 		7C8CEA75301FDC2300BE1D20 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -132,6 +136,8 @@
 		7C8CEA9D301FDD3900BE1D20 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				7C6BC91D301FEB1E00280B69 /* Part.swift */,
+				7C6BC91C301FEB1E00280B69 /* PartCatalog.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -273,8 +279,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C6BC91F301FEB1E00280B69 /* Part.swift in Sources */,
 				7C8CEA76301FDC2300BE1D20 /* ContentView.swift in Sources */,
 				7C8CEA74301FDC2300BE1D20 /* RigShopApp.swift in Sources */,
+				7C6BC91E301FEB1E00280B69 /* PartCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
