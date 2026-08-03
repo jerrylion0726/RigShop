@@ -109,7 +109,7 @@ final class CustomerTests: XCTestCase {
 
         for reputation in [0, 25, 50, 75, 100] {
             for _ in 0..<200 {
-                guard let order = OrderGenerator.makeOrder(reputation: reputation, using: &rng) else {
+                guard let order = OrderGenerator.makeOrder(reputation: reputation, level: 5, using: &rng) else {
                     XCTFail("Generator returned nil at reputation \(reputation)")
                     continue
                 }

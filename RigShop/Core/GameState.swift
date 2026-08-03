@@ -62,6 +62,8 @@ struct FulfillmentResult: Equatable {
     let cost: Int
     let satisfaction: Int
     let reputationChange: Int
+    /// Non-nil when this order pushed the shop up a level.
+    let newLevel: Int?
 
     var profit: Int { revenue - cost }
 }
@@ -84,6 +86,8 @@ struct GameState: Codable {
     var day: Int
     var cash: Int
     var reputation: Int
+    /// Drives the level, which gates what the supplier will carry.
+    var completedOrders: Int
     var inventory: [StockItem]
     var market: [MarketListing]
     var orders: [CustomerOrder]
@@ -95,6 +99,7 @@ struct GameState: Codable {
     init(day: Int = 1,
          cash: Int = GameState.startingCash,
          reputation: Int = GameState.startingReputation,
+         completedOrders: Int = 0,
          inventory: [StockItem] = [],
          market: [MarketListing] = [],
          orders: [CustomerOrder] = [],
@@ -102,6 +107,7 @@ struct GameState: Codable {
         self.day = day
         self.cash = cash
         self.reputation = reputation
+        self.completedOrders = completedOrders
         self.inventory = inventory
         self.market = market
         self.orders = orders
@@ -111,13 +117,23 @@ struct GameState: Codable {
     /// A fresh game with day 1's market and customers already rolled.
     static func newGame(using rng: inout RandomNumberGenerator) -> GameState {
         var state = GameState()
-        state.market = GameState.rollMarket(using: &rng)
-        state.orders = GameState.rollCustomers(reputation: state.reputation, using: &rng)
-        state.note("Day 1. You have $\(state.cash) and a shop full of empty shelves.")
+        state.market = GameState.rollMarket(level: state.level, using: &rng)
+        state.orders = GameState.rollCustomers(reputation: state.reputation,
+                                               level: state.level,
+                                               using: &rng)
+        state.note("Day 1. You have \(state.cash.money) and a shop full of empty shelves.")
         return state
     }
 
     // MARK: - Derived
+
+    /// Computed, never stored — a save file can't drift out of sync with
+    /// the level curve if the level is always recalculated from orders.
+    var level: Int { ShopLevel.level(forCompletedOrders: completedOrders) }
+
+    var ordersToNextLevel: Int? { ShopLevel.ordersToNextLevel(completed: completedOrders) }
+
+    var levelProgress: Double { ShopLevel.progress(completed: completedOrders) }
 
     var inventoryValue: Int {
         inventory.reduce(0) { $0 + $1.part.salvageValue }
@@ -140,7 +156,7 @@ struct GameState: Codable {
         cash -= price
         market[index].stock -= 1
         inventory.append(StockItem(part: listing.part, paidPrice: price))
-        note("Bought \(listing.part.name) for $\(price).")
+        note("Bought \(listing.part.name) for \(price.money).")
         return true
     }
 
@@ -153,7 +169,7 @@ struct GameState: Codable {
         inventory.remove(at: index)
         cash += refund
         let loss = item.paidPrice - refund
-        note("Dumped \(item.part.name) for $\(refund) (lost $\(loss)).")
+        note("Dumped \(item.part.name) for \(refund.money) (lost \(loss.money)).")
         return true
     }
 
@@ -198,14 +214,30 @@ struct GameState: Codable {
         cash += revenue
         reputation = (reputation + repChange).clamped(to: 0...100)
 
+        let levelBefore = level
+        completedOrders += 1
+        let levelAfter = level
+
         let profit = revenue - cost
-        note("\(order.name) paid $\(revenue). Profit $\(profit), satisfaction \(satisfaction)%.")
+        note("\(order.name) paid \(revenue.money). Profit \(profit.money), satisfaction \(satisfaction)%.")
+
+        if levelAfter > levelBefore {
+            let arrivals = PartCatalog.newlyUnlocked(at: levelAfter)
+            if arrivals.isEmpty {
+                note("Level \(levelAfter). Word is getting around.")
+            } else {
+                let names = arrivals.prefix(3).map(\.name).joined(separator: ", ")
+                let extra = arrivals.count > 3 ? " and \(arrivals.count - 3) more" : ""
+                note("Level \(levelAfter)! The supplier now carries \(names)\(extra).")
+            }
+        }
 
         return .success(FulfillmentResult(customerName: order.name,
                                           revenue: revenue,
                                           cost: cost,
                                           satisfaction: satisfaction,
-                                          reputationChange: repChange))
+                                          reputationChange: repChange,
+                                          newLevel: levelAfter > levelBefore ? levelAfter : nil))
     }
 
     // MARK: - Action: advance day
@@ -226,23 +258,26 @@ struct GameState: Codable {
         }
 
         day += 1
-        market = GameState.rollMarket(using: &rng)
-        orders.append(contentsOf: GameState.rollCustomers(reputation: reputation, using: &rng))
-        note("Day \(day). Cash $\(cash), reputation \(reputation).")
+        market = GameState.rollMarket(level: level, using: &rng)
+        orders.append(contentsOf: GameState.rollCustomers(reputation: reputation,
+                                                          level: level,
+                                                          using: &rng))
+        note("Day \(day). Cash \(cash.money), reputation \(reputation).")
     }
 
     // MARK: - Rolling
 
-    static func rollMarket(using rng: inout RandomNumberGenerator) -> [MarketListing] {
+    static func rollMarket(level: Int, using rng: inout RandomNumberGenerator) -> [MarketListing] {
         // Always offer at least one part from every category, so the
         // player can never be structurally locked out of building.
         var picked: [Part] = []
         for category in PartCategory.allCases {
-            if let part = PartCatalog.parts(in: category).randomElement(using: &rng) {
+            if let part = PartCatalog.parts(in: category, unlockedAt: level)
+                .randomElement(using: &rng) {
                 picked.append(part)
             }
         }
-        let rest = PartCatalog.all
+        let rest = PartCatalog.unlocked(at: level)
             .filter { part in !picked.contains(where: { $0.id == part.id }) }
             .shuffled(using: &rng)
             .prefix(max(0, marketSize - picked.count))
@@ -258,10 +293,11 @@ struct GameState: Codable {
     }
 
     static func rollCustomers(reputation: Int,
+                              level: Int,
                               using rng: inout RandomNumberGenerator) -> [CustomerOrder] {
         let count = OrderGenerator.customerCount(reputation: reputation, using: &rng)
         return (0..<count).compactMap { _ in
-            OrderGenerator.makeOrder(reputation: reputation, using: &rng)
+            OrderGenerator.makeOrder(reputation: reputation, level: level, using: &rng)
         }
     }
 
