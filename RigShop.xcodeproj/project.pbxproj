@@ -17,8 +17,11 @@
 		7C6BC92F301FF3F300280B69 /* OrderGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC92E301FF3F200280B69 /* OrderGenerator.swift */; };
 		7C6BC931301FF67700280B69 /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC930301FF67600280B69 /* GameState.swift */; };
 		7C6BC933301FF68200280B69 /* GameStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC932301FF68200280B69 /* GameStateTests.swift */; };
+		7C6BC9373020654500280B69 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC9343020654400280B69 /* RootView.swift */; };
+		7C6BC9383020654500280B69 /* ShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC9353020654500280B69 /* ShopView.swift */; };
+		7C6BC9393020654500280B69 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC9363020654500280B69 /* Theme.swift */; };
+		7C6BC93B302065AC00280B69 /* GameStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC93A302065AC00280B69 /* GameStore.swift */; };
 		7C8CEA74301FDC2300BE1D20 /* RigShopApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C8CEA73301FDC2300BE1D20 /* RigShopApp.swift */; };
-		7C8CEA76301FDC2300BE1D20 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C8CEA75301FDC2300BE1D20 /* ContentView.swift */; };
 		7C8CEA78301FDC2A00BE1D20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CEA77301FDC2A00BE1D20 /* Assets.xcassets */; };
 		7C8CEA7B301FDC2A00BE1D20 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CEA7A301FDC2A00BE1D20 /* Preview Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -44,9 +47,12 @@
 		7C6BC92E301FF3F200280B69 /* OrderGenerator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OrderGenerator.swift; sourceTree = "<group>"; };
 		7C6BC930301FF67600280B69 /* GameState.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
 		7C6BC932301FF68200280B69 /* GameStateTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
+		7C6BC9343020654400280B69 /* RootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		7C6BC9353020654500280B69 /* ShopView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShopView.swift; sourceTree = "<group>"; };
+		7C6BC9363020654500280B69 /* Theme.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		7C6BC93A302065AC00280B69 /* GameStore.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GameStore.swift; sourceTree = "<group>"; };
 		7C8CEA70301FDC2300BE1D20 /* RigShop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RigShop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C8CEA73301FDC2300BE1D20 /* RigShopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RigShopApp.swift; sourceTree = "<group>"; };
-		7C8CEA75301FDC2300BE1D20 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7C8CEA77301FDC2A00BE1D20 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7C8CEA7A301FDC2A00BE1D20 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		7C8CEA80301FDC2A00BE1D20 /* RigShopTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RigShopTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -91,10 +97,10 @@
 		7C8CEA72301FDC2300BE1D20 /* RigShop */ = {
 			isa = PBXGroup;
 			children = (
+				7C6BC93A302065AC00280B69 /* GameStore.swift */,
 				7C8CEA9E301FDD5A00BE1D20 /* Views */,
 				7C8CEA9D301FDD3900BE1D20 /* Core */,
 				7C8CEA73301FDC2300BE1D20 /* RigShopApp.swift */,
-				7C8CEA75301FDC2300BE1D20 /* ContentView.swift */,
 				7C8CEA77301FDC2A00BE1D20 /* Assets.xcassets */,
 				7C8CEA79301FDC2A00BE1D20 /* Preview Content */,
 			);
@@ -136,6 +142,9 @@
 		7C8CEA9E301FDD5A00BE1D20 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				7C6BC9343020654400280B69 /* RootView.swift */,
+				7C6BC9353020654500280B69 /* ShopView.swift */,
+				7C6BC9363020654500280B69 /* Theme.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -243,11 +252,14 @@
 				7C6BC91F301FEB1E00280B69 /* Part.swift in Sources */,
 				7C6BC923301FED9A00280B69 /* PCBuild.swift in Sources */,
 				7C6BC92F301FF3F300280B69 /* OrderGenerator.swift in Sources */,
-				7C8CEA76301FDC2300BE1D20 /* ContentView.swift in Sources */,
+				7C6BC9373020654500280B69 /* RootView.swift in Sources */,
+				7C6BC93B302065AC00280B69 /* GameStore.swift in Sources */,
 				7C6BC929301FF1B700280B69 /* Customer.swift in Sources */,
 				7C8CEA74301FDC2300BE1D20 /* RigShopApp.swift in Sources */,
 				7C6BC931301FF67700280B69 /* GameState.swift in Sources */,
 				7C6BC91E301FEB1E00280B69 /* PartCatalog.swift in Sources */,
+				7C6BC9393020654500280B69 /* Theme.swift in Sources */,
+				7C6BC9383020654500280B69 /* ShopView.swift in Sources */,
 				7C6BC922301FED9A00280B69 /* Compatibility.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
