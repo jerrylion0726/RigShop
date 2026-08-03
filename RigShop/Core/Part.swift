@@ -36,6 +36,7 @@ enum PartCategory: String, Codable, CaseIterable, Identifiable {
 
 enum Socket: String, Codable, Hashable, CaseIterable {
     case lga1700 = "LGA1700"
+    case lga1851 = "LGA1851"
     case am4     = "AM4"
     case am5     = "AM5"
 }
@@ -68,7 +69,22 @@ struct Part: Identifiable, Codable, Hashable {
     let name: String
     /// Wholesale reference price in whole dollars. Daily price floats around this.
     let basePrice: Int
+    /// Shop level required before the supplier will carry this part.
+    /// 1 means available from day one; 10 is the top of the ladder.
+    let unlockLevel: Int
     let spec: Spec
+
+    init(id: String,
+         name: String,
+         basePrice: Int,
+         unlockLevel: Int = 1,
+         spec: Spec) {
+        self.id = id
+        self.name = name
+        self.basePrice = basePrice
+        self.unlockLevel = unlockLevel
+        self.spec = spec
+    }
 }
 
 // MARK: - Convenience accessors
@@ -106,7 +122,9 @@ extension Part {
         }
     }
 
-    /// Relative performance score, 0–100. Only CPUs and GPUs contribute.
+    /// Relative performance score. Entry level sits near 12; the halo
+    /// parts run past 100. Satisfaction compares ratios, not absolutes,
+    /// so the scale has no ceiling it needs to respect.
     var score: Int {
         switch spec {
         case .cpu(_, _, let score): return score

@@ -31,8 +31,21 @@ final class CompatibilityTests: XCTestCase {
 
     // MARK: - Catalog integrity
 
-    func testCatalogHasExpectedCount() {
-        XCTAssertEqual(PartCatalog.all.count, 42)
+    func testCatalogIsBigEnoughToOfferChoices() {
+            XCTAssertGreaterThan(PartCatalog.all.count, 90)
+            for category in PartCategory.allCases {
+                XCTAssertGreaterThanOrEqual(PartCatalog.parts(in: category).count, 10,
+                                            "Too few options for \(category.rawValue)")
+            }
+        }
+
+    /// Level 1 must be a playable shop, not a locked door.
+    func testLevelOneCanBuildAMachine() {
+        for category in PartCategory.allCases {
+            XCTAssertGreaterThanOrEqual(
+                PartCatalog.parts(in: category, unlockedAt: 1).count, 2,
+                "Level 1 has no \(category.rawValue) to choose from")
+        }
     }
 
     func testCatalogIdsAreUnique() {
@@ -47,17 +60,17 @@ final class CompatibilityTests: XCTestCase {
         }
     }
 
-    func testAM4BoardsAreDDR4OnlyAndAM5AreDDR5Only() {
-        for board in PartCatalog.motherboards {
-            switch board.socket {
-            case .am4:
-                XCTAssertEqual(board.supportedMemoryTypes, [.ddr4], board.name)
-            case .am5:
-                XCTAssertEqual(board.supportedMemoryTypes, [.ddr5], board.name)
-            case .lga1700, .none:
-                break // LGA1700 legitimately comes in both flavours
+    func testBoardMemorySupportMatchesPlatform() {
+            for board in PartCatalog.motherboards {
+                switch board.socket {
+                case .am4:
+                    XCTAssertEqual(board.supportedMemoryTypes, [.ddr4], board.name)
+                case .am5, .lga1851:
+                    XCTAssertEqual(board.supportedMemoryTypes, [.ddr5], board.name)
+                case .lga1700, .none:
+                    break // LGA1700 legitimately comes in both flavours
+                }
             }
-        }
     }
 
     // MARK: - Happy path
