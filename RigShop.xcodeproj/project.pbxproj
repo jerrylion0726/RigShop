@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7C51C96B3024F0400016DB80 /* CustomerFigure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C51C9693024F03F0016DB80 /* CustomerFigure.swift */; };
+		7C51C96C3024F0400016DB80 /* ShopScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C51C96A3024F0400016DB80 /* ShopScene.swift */; };
 		7C6BC91E301FEB1E00280B69 /* PartCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC91C301FEB1E00280B69 /* PartCatalog.swift */; };
 		7C6BC91F301FEB1E00280B69 /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC91D301FEB1E00280B69 /* Part.swift */; };
 		7C6BC922301FED9A00280B69 /* Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C6BC920301FED9A00280B69 /* Compatibility.swift */; };
@@ -38,6 +40,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		7C51C9693024F03F0016DB80 /* CustomerFigure.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomerFigure.swift; sourceTree = "<group>"; };
+		7C51C96A3024F0400016DB80 /* ShopScene.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShopScene.swift; sourceTree = "<group>"; };
 		7C6BC91C301FEB1E00280B69 /* PartCatalog.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartCatalog.swift; sourceTree = "<group>"; };
 		7C6BC91D301FEB1E00280B69 /* Part.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Part.swift; sourceTree = "<group>"; };
 		7C6BC920301FED9A00280B69 /* Compatibility.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Compatibility.swift; sourceTree = "<group>"; };
@@ -145,6 +149,8 @@
 		7C8CEA9E301FDD5A00BE1D20 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				7C51C9693024F03F0016DB80 /* CustomerFigure.swift */,
+				7C51C96A3024F0400016DB80 /* ShopScene.swift */,
 				7C6BC9343020654400280B69 /* RootView.swift */,
 				7C6BC9353020654500280B69 /* ShopView.swift */,
 				7C6BC9363020654500280B69 /* Theme.swift */,
@@ -253,7 +259,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				7C6BC91F301FEB1E00280B69 /* Part.swift in Sources */,
+				7C51C96B3024F0400016DB80 /* CustomerFigure.swift in Sources */,
 				7C6BC923301FED9A00280B69 /* PCBuild.swift in Sources */,
+				7C51C96C3024F0400016DB80 /* ShopScene.swift in Sources */,
 				7C6BC92F301FF3F300280B69 /* OrderGenerator.swift in Sources */,
 				7C6BC9373020654500280B69 /* RootView.swift in Sources */,
 				7C6BC93B302065AC00280B69 /* GameStore.swift in Sources */,
