@@ -115,7 +115,7 @@ enum PartCatalog {
         // ── LGA1700 · DDR4 ─────────────────────────────────────────
         Part(id: "mb-b660m-hdv", name: "ASRock B660M-HDV", basePrice: 90, unlockLevel: 1,
              spec: .motherboard(socket: .lga1700, memoryTypes: [.ddr4])),
-        Part(id: "mb-b760m-p-ddr4", name: "MSI PRO B760M-P DDR4", basePrice: 120, unlockLevel: 2,
+        Part(id: "mb-b760m-p-ddr4", name: "MSI PRO B760M-P DDR4", basePrice: 120, unlockLevel: 1,
              spec: .motherboard(socket: .lga1700, memoryTypes: [.ddr4])),
         Part(id: "mb-b760-gaming-x-ddr4", name: "Gigabyte B760 GAMING X DDR4", basePrice: 150, unlockLevel: 3,
              spec: .motherboard(socket: .lga1700, memoryTypes: [.ddr4])),
@@ -141,7 +141,7 @@ enum PartCatalog {
         // ── AM4 · DDR4 ─────────────────────────────────────────────
         Part(id: "mb-b450m-pro4", name: "ASRock B450M PRO4", basePrice: 75, unlockLevel: 1,
              spec: .motherboard(socket: .am4, memoryTypes: [.ddr4])),
-        Part(id: "mb-b550a-pro", name: "MSI B550-A PRO", basePrice: 110, unlockLevel: 2,
+        Part(id: "mb-b550a-pro", name: "MSI B550-A PRO", basePrice: 110, unlockLevel: 1,
              spec: .motherboard(socket: .am4, memoryTypes: [.ddr4])),
         Part(id: "mb-b550-aorus-elite", name: "Gigabyte B550 AORUS ELITE AX V2", basePrice: 150, unlockLevel: 3,
              spec: .motherboard(socket: .am4, memoryTypes: [.ddr4])),

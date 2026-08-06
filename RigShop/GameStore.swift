@@ -38,6 +38,16 @@ final class GameStore {
         state.buy(listing)
     }
 
+    /// Buy and hand back the unit that landed on the shelf, so the build
+    /// screen can drop it straight into a slot. Buying and then hunting
+    /// for "the one I just bought" would be guesswork — two identical
+    /// cards bought on different days are different units at different
+    /// cost bases.
+    func buyForBuild(_ listing: MarketListing) -> StockItem? {
+        guard state.buy(listing) else { return nil }
+        return state.inventory.last
+    }
+
     @discardableResult
     func sellBack(_ item: StockItem) -> Bool {
         state.sellBack(item)

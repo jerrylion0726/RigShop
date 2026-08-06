@@ -17,6 +17,11 @@ struct HomeView: View {
     @State private var showSupplier = false
     @State private var showInventory = false
     @State private var selectedOrder: CustomerOrder?
+    /// Held while the order card dismisses, then promoted to `building`.
+    /// Presenting a sheet from inside a dismissing sheet drops the second
+    /// one, so the handoff happens in onDismiss instead.
+    @State private var pendingBuild: CustomerOrder?
+    @State private var building: CustomerOrder?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,8 +39,21 @@ struct HomeView: View {
         }
         .background(Theme.ink)
         .sheet(isPresented: $showSupplier) { ShopView() }
-        .sheet(isPresented: $showInventory) { InventoryStub() }
-        .sheet(item: $selectedOrder) { order in OrderCard(order: order) }
+        .sheet(isPresented: $showInventory) { InventoryView() }
+        .sheet(item: $selectedOrder, onDismiss: {
+            if let pending = pendingBuild {
+                pendingBuild = nil
+                building = pending
+            }
+        }) { order in
+            OrderCard(order: order) {
+                pendingBuild = order
+                selectedOrder = nil
+            }
+        }
+        .fullScreenCover(item: $building) { order in
+            BuildView(order: order)
+        }
     }
 }
 
@@ -196,6 +214,7 @@ private struct CustomerRow: View {
 // MARK: - Action bar
 
 private struct ActionBar: View {
+    @Environment(GameStore.self) private var store
     let supplier: () -> Void
     let inventory: () -> Void
     let endDay: () -> Void
@@ -203,11 +222,14 @@ private struct ActionBar: View {
     var body: some View {
         HStack(spacing: 10) {
             ActionButton(title: "Supplier", symbol: "shippingbox.fill",
-                         filled: true, action: supplier)
+                         filled: true, badge: nil, action: supplier)
             ActionButton(title: "Inventory", symbol: "tray.full.fill",
-                         filled: false, action: inventory)
+                         filled: false,
+                         badge: store.state.inventory.isEmpty
+                                ? nil : "\(store.state.inventory.count)",
+                         action: inventory)
             ActionButton(title: "Close Up", symbol: "moon.fill",
-                         filled: false, action: endDay)
+                         filled: false, badge: nil, action: endDay)
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
@@ -223,6 +245,7 @@ private struct ActionButton: View {
     let title: String
     let symbol: String
     let filled: Bool
+    let badge: String?
     let action: () -> Void
 
     var body: some View {
@@ -238,6 +261,17 @@ private struct ActionButton: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(filled ? Theme.gold : Theme.raised)
             )
+            .overlay(alignment: .topTrailing) {
+                if let badge {
+                    Text(badge)
+                        .font(.spec(9, .bold))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.gold))
+                        .offset(x: -6, y: 6)
+                }
+            }
         }
         .buttonStyle(.plain)
     }
@@ -247,8 +281,13 @@ private struct ActionButton: View {
 
 private struct OrderCard: View {
     let order: CustomerOrder
+    let build: () -> Void
 
     private var tier: PerformanceTier { PerformanceTier(score: order.expectedScore) }
+
+    private var shortName: String {
+        order.name.split(separator: " ").first.map(String.init) ?? order.name
+    }
 
     var body: some View {
         ScrollView {
@@ -267,12 +306,11 @@ private struct OrderCard: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
 
-                // Headline numbers
                 HStack(spacing: 0) {
                     figure("BUDGET", order.budget.money, Theme.gold, sub: "you get paid this")
                     Rectangle().fill(Theme.line).frame(width: 1, height: 44)
-                    figure("TARGET", "\(order.expectedScore)", Theme.text, sub: tier.rawValue,
-                           subTint: tier.tint)
+                    figure("TARGET", "\(order.expectedScore) pts", Theme.text,
+                           sub: tier.rawValue, subTint: tier.tint)
                     Rectangle().fill(Theme.line).frame(width: 1, height: 44)
                     figure("DAYS LEFT", "\(CustomerOrder.patience - order.daysWaiting)",
                            Theme.muted, sub: "then they walk")
@@ -289,16 +327,30 @@ private struct OrderCard: View {
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 26)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 10)
             }
             .frame(maxWidth: .infinity)
         }
         .background(Theme.ink)
+        // Pinned outside the scroll view. A primary action should never
+        // need scrolling to find, and anything sitting on the sheet's
+        // bottom edge competes with the home-indicator gesture area.
+        .safeAreaInset(edge: .bottom) {
+            Button(action: build) {
+                Label("Build for \(shortName)", systemImage: "wrench.and.screwdriver.fill")
+                    .font(.spec(14, .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.gold))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
+            .background(.ultraThinMaterial)
+        }
         .presentationDetents([.medium, .large])
-    }
-
-    private var shortName: String {
-        order.name.split(separator: " ").first.map(String.init) ?? order.name
     }
 
     private func figure(_ label: String,
@@ -308,7 +360,7 @@ private struct OrderCard: View {
                         subTint: Color = Theme.muted) -> some View {
         VStack(spacing: 2) {
             Text(label).font(.spec(9, .semibold)).tracking(1.1).foregroundStyle(Theme.muted)
-            Text(value).font(.spec(17, .semibold)).foregroundStyle(tint)
+            Text(value).font(.spec(15, .semibold)).foregroundStyle(tint)
             Text(sub).font(.spec(8)).foregroundStyle(subTint)
                 .multilineTextAlignment(.center)
         }
@@ -317,10 +369,6 @@ private struct OrderCard: View {
 }
 
 // MARK: - What this customer weighs
-//
-// The single most useful thing the card can tell you: where to spend.
-// An editing customer wants CPU; a gamer wants the graphics card. Same
-// budget, completely different right answer.
 
 private struct WeightBreakdown: View {
     let order: CustomerOrder
@@ -367,17 +415,107 @@ private struct WeightBreakdown: View {
     }
 }
 
-// MARK: - Placeholder
+// MARK: - Inventory
 
-private struct InventoryStub: View {
+private struct InventoryView: View {
+    @Environment(GameStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        ZStack {
-            Theme.ink.ignoresSafeArea()
-            VStack(spacing: 8) {
-                Text("Inventory").font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Theme.text)
-                Text("Arrives in Step 10.").font(.spec(13)).foregroundStyle(Theme.muted)
+        NavigationStack {
+            ScrollView {
+                if store.state.inventory.isEmpty {
+                    VStack(spacing: 6) {
+                        Text("Shelf's empty.")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Theme.text)
+                        Text("Parts you buy land here until a machine needs them.")
+                            .font(.spec(11))
+                            .foregroundStyle(Theme.muted)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 30)
+                    .padding(.top, 60)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(PartCategory.buildOrder, id: \.self) { category in
+                            let items = store.state.stock(in: category)
+                            if !items.isEmpty {
+                                HStack {
+                                    Text(category.displayName.uppercased())
+                                        .font(.spec(10, .semibold)).tracking(1.3)
+                                        .foregroundStyle(category.tint)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 16)
+                                .padding(.bottom, 6)
+
+                                ForEach(items) { item in
+                                    StockRow(item: item) { store.sellBack(item) }
+                                    Divider().overlay(Theme.line).padding(.leading, 16)
+                                }
+                            }
+                        }
+                        Color.clear.frame(height: 20)
+                    }
+                }
+            }
+            .background(Theme.ink)
+            .navigationTitle("Inventory · \(store.state.inventoryValue.money)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.surface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(.spec(13, .semibold))
+                        .foregroundStyle(Theme.gold)
+                }
             }
         }
+    }
+}
+
+private struct StockRow: View {
+    let item: StockItem
+    let sell: () -> Void
+
+    private var loss: Int { item.paidPrice - item.part.salvageValue }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(item.part.category.tint).frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.part.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                Text("\(item.part.specSummary) · paid \(item.paidPrice.money)")
+                    .font(.spec(10))
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(.leading, 12)
+
+            Spacer(minLength: 8)
+
+            Button(action: sell) {
+                VStack(spacing: 1) {
+                    Text("Dump")
+                        .font(.spec(11, .semibold))
+                    Text("\(item.part.salvageValue.money)")
+                        .font(.spec(10))
+                }
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Theme.raised))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Sell back at a loss of \(loss.money)")
+        }
+        .padding(.trailing, 16)
+        .padding(.vertical, 10)
     }
 }
