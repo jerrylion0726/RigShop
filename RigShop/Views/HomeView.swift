@@ -27,7 +27,8 @@ struct HomeView: View {
         VStack(spacing: 0) {
             TopBar()
 
-            ShopScene {
+            ShopScene(stock: store.state.inventory,
+                      onShelvesTapped: { showInventory = true }) {
                 CustomerRow(selected: $selectedOrder)
             }
 
