@@ -35,13 +35,11 @@ struct StockItem: Identifiable, Codable, Hashable {
 
 struct MarketListing: Identifiable, Codable, Hashable {
     let part: Part
-    /// Today's price. Base price times a daily swing.
     let todayPrice: Int
     var stock: Int
 
     var id: String { part.id }
 
-    /// Percent off (negative) or over (positive) the reference price.
     var priceDelta: Int {
         guard part.basePrice > 0 else { return 0 }
         return (todayPrice - part.basePrice) * 100 / part.basePrice
@@ -54,18 +52,23 @@ enum FulfillmentError: Error, Equatable {
     case orderNotFound
     case incompatible([CompatibilityIssue])
     case partsNotInStock
+    /// A repair where a dead slot was left unfilled.
+    case faultNotReplaced(PartCategory)
 }
 
 struct FulfillmentResult: Equatable {
     let customerName: String
     let revenue: Int
     let cost: Int
+    /// Credit for the dead parts pulled out of a repair. Zero for new builds.
+    let scrap: Int
     let satisfaction: Int
     let reputationChange: Int
+    let wasRepair: Bool
     /// Non-nil when this order pushed the shop up a level.
     let newLevel: Int?
 
-    var profit: Int { revenue - cost }
+    var profit: Int { revenue + scrap - cost }
 }
 
 // MARK: - Game state
@@ -74,11 +77,12 @@ struct GameState: Codable {
 
     // MARK: Tuning
 
-    static let startingCash = 3_000
+    /// Enough for roughly one entry-level machine. The shop is meant to
+    /// feel like it just opened, which is also what makes repairs matter
+    /// from day one: they only need one part.
+    static let startingCash = 600
     static let startingReputation = 50
-    /// Fraction of base price recovered when dumping unsold stock.
     static let salvageRate = 60
-    /// How many distinct parts the supplier offers each day.
     static let marketSize = 14
 
     // MARK: Stored
@@ -86,12 +90,10 @@ struct GameState: Codable {
     var day: Int
     var cash: Int
     var reputation: Int
-    /// Drives the level, which gates what the supplier will carry.
     var completedOrders: Int
     var inventory: [StockItem]
     var market: [MarketListing]
     var orders: [CustomerOrder]
-    /// Newest first. Trimmed so saves don't grow forever.
     var log: [String]
 
     // MARK: Init
@@ -114,32 +116,26 @@ struct GameState: Codable {
         self.log = log
     }
 
-    /// A fresh game with day 1's market and customers already rolled.
     static func newGame(using rng: inout RandomNumberGenerator) -> GameState {
         var state = GameState()
         state.market = GameState.rollMarket(level: state.level, using: &rng)
         state.orders = GameState.rollCustomers(reputation: state.reputation,
                                                level: state.level,
                                                using: &rng)
-        state.note("Day 1. You have \(state.cash.money) and a shop full of empty shelves.")
+        state.note("Day 1. \(state.cash.money) in the till and a shop full of empty shelves.")
         return state
     }
 
     // MARK: - Derived
 
-    /// Computed, never stored — a save file can't drift out of sync with
-    /// the level curve if the level is always recalculated from orders.
     var level: Int { ShopLevel.level(forCompletedOrders: completedOrders) }
-
     var ordersToNextLevel: Int? { ShopLevel.ordersToNextLevel(completed: completedOrders) }
-
     var levelProgress: Double { ShopLevel.progress(completed: completedOrders) }
 
     var inventoryValue: Int {
         inventory.reduce(0) { $0 + $1.part.salvageValue }
     }
 
-    /// Stock grouped by category, for the build screen.
     func stock(in category: PartCategory) -> [StockItem] {
         inventory.filter { $0.part.category == category }
     }
@@ -175,9 +171,12 @@ struct GameState: Codable {
 
     // MARK: - Action: fulfill
 
-    /// Hand a finished machine to a customer.
-    /// `stockIDs` identifies which physical units leave the shelf —
-    /// two identical GPUs bought on different days cost different amounts.
+    /// Hand a finished job back to the customer.
+    ///
+    /// `stockIDs` identifies which physical units leave the shelf — two
+    /// identical GPUs bought on different days cost different amounts.
+    /// For a repair those units go into the machine the customer brought
+    /// in; the parts already in it cost the shop nothing.
     mutating func fulfill(orderID: UUID,
                           using stockIDs: [UUID]) -> Result<FulfillmentResult, FulfillmentError> {
         guard let orderIndex = orders.firstIndex(where: { $0.id == orderID }) else {
@@ -185,7 +184,6 @@ struct GameState: Codable {
         }
         let order = orders[orderIndex]
 
-        // Resolve the chosen stock items.
         var chosen: [StockItem] = []
         for id in stockIDs {
             guard let item = inventory.first(where: { $0.id == id }) else {
@@ -194,32 +192,46 @@ struct GameState: Codable {
             chosen.append(item)
         }
 
-        // Assemble and validate.
-        var build = PCBuild()
+        // Start from whatever the customer already has, then fit the new parts.
+        var build = order.startingMachine
         for item in chosen {
             build[item.part.category] = item.part
         }
+
+        // Every dead slot has to actually be filled.
+        if let repair = order.repair {
+            for fault in repair.faults where build[fault] == nil {
+                return .failure(.faultNotReplaced(fault))
+            }
+        }
+
         let issues = Compatibility.check(build)
         guard issues.isEmpty else { return .failure(.incompatible(issues)) }
 
-        // Money and mood.
         let cost = chosen.reduce(0) { $0 + $1.paidPrice }
         let revenue = order.budget
+        let scrap = order.repair?.scrapValue ?? 0
         let satisfaction = Scoring.satisfaction(build: build, order: order)
         let repChange = Scoring.reputationChange(satisfaction: satisfaction)
 
         // Commit.
         inventory.removeAll { item in stockIDs.contains(item.id) }
         orders.remove(at: orderIndex)
-        cash += revenue
+        cash += revenue + scrap
         reputation = (reputation + repChange).clamped(to: 0...100)
 
         let levelBefore = level
         completedOrders += 1
         let levelAfter = level
 
-        let profit = revenue - cost
-        note("\(order.name) paid \(revenue.money). Profit \(profit.money), satisfaction \(satisfaction)%.")
+        let profit = revenue + scrap - cost
+        if order.isRepair {
+            note("Fixed \(order.name)'s machine for \(revenue.money). "
+                 + "Profit \(profit.money), satisfaction \(satisfaction)%.")
+        } else {
+            note("\(order.name) paid \(revenue.money). "
+                 + "Profit \(profit.money), satisfaction \(satisfaction)%.")
+        }
 
         if levelAfter > levelBefore {
             let arrivals = PartCatalog.newlyUnlocked(at: levelAfter)
@@ -235,15 +247,16 @@ struct GameState: Codable {
         return .success(FulfillmentResult(customerName: order.name,
                                           revenue: revenue,
                                           cost: cost,
+                                          scrap: scrap,
                                           satisfaction: satisfaction,
                                           reputationChange: repChange,
+                                          wasRepair: order.isRepair,
                                           newLevel: levelAfter > levelBefore ? levelAfter : nil))
     }
 
     // MARK: - Action: advance day
 
     mutating func advanceDay(using rng: inout RandomNumberGenerator) {
-        // Age every open order; drop the ones who gave up.
         for index in orders.indices {
             orders[index].daysWaiting += 1
         }
@@ -268,8 +281,6 @@ struct GameState: Codable {
     // MARK: - Rolling
 
     static func rollMarket(level: Int, using rng: inout RandomNumberGenerator) -> [MarketListing] {
-        // Always offer at least one part from every category, so the
-        // player can never be structurally locked out of building.
         var picked: [Part] = []
         for category in PartCategory.allCases {
             if let part = PartCatalog.parts(in: category, unlockedAt: level)

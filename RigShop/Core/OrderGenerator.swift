@@ -12,15 +12,9 @@
 //  measure it, then derive the customer's budget and expectations
 //  from that build. Every order therefore has at least one solution.
 //
-//  The reference build only ever uses parts the shop has unlocked,
-//  which is what keeps a level-1 customer from walking in asking for
-//  RTX 5090 performance.
-//
-//  Selection is budget-aware at every step: each slot only considers
-//  parts we can still afford once the remaining slots are paid for.
-//  Pure rejection sampling looked simpler but failed roughly 0.4% of
-//  the time at tight budgets, because the affordable region is a
-//  sliver of the search space.
+//  Repairs use the same trick from the other end: build a real machine,
+//  break part of it, then price the job off a reference fix that is
+//  known to work.
 //
 //  Do NOT import SwiftUI in this file.
 //
@@ -37,11 +31,13 @@ enum OrderGenerator {
 
     private static let lastInitials = ["B.", "C.", "D.", "K.", "M.", "N.", "R.", "S.", "T.", "V."]
 
+    /// Share of walk-ins that are repairs rather than new builds.
+    /// Repairs tie up less cash, so they're the lifeline when the till
+    /// is empty — but they pay less per job.
+    private static let repairShare = 35
+
     // MARK: - Tuning knobs
 
-    /// Profit margin baked into the customer's budget, as a percentage
-    /// above the reference build's parts cost.
-    /// Tighter at low reputation, more generous at high reputation.
     private static func marginRange(reputation: Int) -> ClosedRange<Int> {
         switch reputation {
         case ..<30:   return 12...22
@@ -51,9 +47,32 @@ enum OrderGenerator {
         }
     }
 
-    /// Price ceiling for the reference build. Scales with reputation for
-    /// the customer mix, and with level because a level-9 shop is dealing
-    /// in parts that simply cost more.
+    /// Flat call-out fee on a repair, on top of parts and margin.
+    /// Without it a $45 power supply swap earns single-digit profit and
+    /// nobody would ever take the job.
+    private static func labourFee(level: Int, using rng: inout RandomNumberGenerator) -> Int {
+        let base = Int.random(in: 45...90, using: &rng)
+        return base + base * 10 * max(0, level - 1) / 100
+    }
+
+    /// A hard ceiling on how big a job the shop attracts, by level.
+    ///
+    /// Reputation says how well regarded you are; level says how
+    /// established. A shop that opened yesterday does not get a $1,500
+    /// commission walking through the door however polite it was to its
+    /// first three customers — and with a lean starting till, one of
+    /// those would soft-lock the game on day one.
+    private static func levelCeiling(_ level: Int) -> Int {
+        switch level {
+        case 1:  return 520
+        case 2:  return 720
+        case 3:  return 950
+        case 4:  return 1_300
+        case 5:  return 1_800
+        default: return Int.max
+        }
+    }
+
     private static func costCeiling(reputation: Int,
                                     level: Int,
                                     using rng: inout RandomNumberGenerator) -> Int {
@@ -65,12 +84,10 @@ enum OrderGenerator {
         default:      base = 1500...2900
         }
         let roll = Int.random(in: base, using: &rng)
-        // +12% headroom per level above 1, so high-level shops see
-        // customers who can actually pay for the new hardware.
-        return roll + roll * 12 * max(0, level - 1) / 100
+        let withLevelBonus = roll + roll * 12 * max(0, level - 1) / 100
+        return min(withLevelBonus, levelCeiling(level))
     }
 
-    /// How many customers show up, given current reputation.
     static func customerCount(reputation: Int, using rng: inout RandomNumberGenerator) -> Int {
         switch reputation {
         case ..<30:   return Int.random(in: 1...2, using: &rng)
@@ -80,57 +97,153 @@ enum OrderGenerator {
         }
     }
 
-    // MARK: - Order
+    // MARK: - Entry point
 
-    /// Build a single order. Never returns nil for a non-empty catalog —
-    /// the cheapest valid build is used as a last resort.
+    /// One walk-in: either a new build or a repair.
     static func makeOrder(reputation: Int,
                           level: Int,
                           using rng: inout RandomNumberGenerator) -> CustomerOrder? {
+        if Int.random(in: 1...100, using: &rng) <= repairShare,
+           let repair = makeRepair(reputation: reputation, level: level, using: &rng) {
+            return repair
+        }
+        return makeNewBuild(reputation: reputation, level: level, using: &rng)
+    }
+
+    // MARK: - New build
+
+    static func makeNewBuild(reputation: Int,
+                             level: Int,
+                             using rng: inout RandomNumberGenerator) -> CustomerOrder? {
         guard let useCase = UseCase.allCases.randomElement(using: &rng) else { return nil }
 
         let ceiling = costCeiling(reputation: reputation, level: level, using: &rng)
-        var reference: PCBuild?
-        for _ in 0..<40 {
-            if let build = attemptBuild(ceiling: ceiling, level: level, using: &rng) {
-                reference = build
-                break
-            }
-        }
-        // Fallback: guaranteed to exist, guaranteed valid, always unlocked.
-        let build = reference ?? cheapestBuild
+        let build = randomMachine(ceiling: ceiling, level: level, using: &rng) ?? cheapestBuild
         guard build.isComplete else { return nil }
 
         let cost = build.partsCost
         let margin = Int.random(in: marginRange(reputation: reputation), using: &rng)
         let budget = cost + (cost * margin / 100)
 
-        // The customer expects roughly what the reference build delivers,
-        // give or take a little, so hitting it exactly is not required.
         let referenceScore = Scoring.weightedScore(of: build, for: useCase)
         let wobble = Int.random(in: -4...3, using: &rng)
         let expected = max(10, referenceScore + wobble)
 
-        let name = "\(firstNames.randomElement(using: &rng) ?? "Alex") "
-                 + "\(lastInitials.randomElement(using: &rng) ?? "K.")"
-
-        return CustomerOrder(name: name,
+        return CustomerOrder(name: randomName(using: &rng),
                              useCase: useCase,
                              budget: budget,
                              expectedScore: expected)
     }
 
+    // MARK: - Repair
+
+    static func makeRepair(reputation: Int,
+                           level: Int,
+                           using rng: inout RandomNumberGenerator) -> CustomerOrder? {
+        guard let useCase = UseCase.allCases.randomElement(using: &rng) else { return nil }
+        let ceiling = costCeiling(reputation: reputation, level: level, using: &rng)
+
+        // Not every machine can be broken in a way the catalogue can fix —
+        // a dead part with no affordable equal-or-better replacement is a
+        // dead end. Roll until one lands.
+        for _ in 0..<25 {
+            guard let machine = randomMachine(ceiling: ceiling, level: level, using: &rng),
+                  machine.isComplete else { continue }
+
+            var faults: [PartCategory] = []
+            guard let first = PartCategory.buildOrder.randomElement(using: &rng) else { continue }
+            faults.append(first)
+            if level >= 4, Int.random(in: 1...100, using: &rng) <= 20 {
+                let others = PartCategory.buildOrder.filter { $0 != first }
+                if let second = others.randomElement(using: &rng) { faults.append(second) }
+            }
+
+            let job = RepairJob(machine: machine, faults: faults)
+            guard let plan = repairPlan(for: job, level: level) else { continue }
+
+            let fairPartsCost = plan.values.reduce(0) { $0 + $1.basePrice }
+            let margin = Int.random(in: marginRange(reputation: reputation), using: &rng)
+            let fee = fairPartsCost + (fairPartsCost * margin / 100)
+                    + labourFee(level: level, using: &rng)
+
+            // They want the machine back the way it was, not worse.
+            let expected = max(10, Scoring.weightedScore(of: machine, for: useCase))
+
+            return CustomerOrder(name: randomName(using: &rng),
+                                 useCase: useCase,
+                                 budget: fee,
+                                 expectedScore: expected,
+                                 repair: job)
+        }
+        return nil
+    }
+
+    /// A reference fix for every dead slot, or nil if the catalogue can't
+    /// produce one.
+    ///
+    /// Slots are filled in build order and each choice is made against the
+    /// machine *as it stands*, not against the machine with every fault
+    /// still open. That matters: choosing a graphics card while the power
+    /// supply slot is empty skips the wattage rule entirely, so picking
+    /// both independently can hand back a 575W card and a 550W supply.
+    /// Power comes last, by which point the card is already fitted.
+    static func repairPlan(for job: RepairJob, level: Int) -> [PartCategory: Part]? {
+        var machine = job.openMachine
+        var plan: [PartCategory: Part] = [:]
+
+        for fault in PartCategory.buildOrder where job.faults.contains(fault) {
+            guard let dead = job.machine[fault],
+                  let replacement = cheapestAcceptableReplacement(for: fault,
+                                                                  matching: dead,
+                                                                  in: machine,
+                                                                  level: level)
+            else { return nil }
+            machine[fault] = replacement
+            plan[fault] = replacement
+        }
+
+        return Compatibility.isValid(machine) ? plan : nil
+    }
+
+    /// The cheapest unlocked part that fits this machine and is no worse
+    /// than what died. This is the yardstick the fee is set against, so
+    /// beating it is where a repair shop makes its money.
+    static func cheapestAcceptableReplacement(for category: PartCategory,
+                                              matching dead: Part,
+                                              in machine: PCBuild,
+                                              level: Int) -> Part? {
+        PartCatalog.parts(in: category, unlockedAt: level)
+            .filter { candidate in
+                guard candidate.score >= dead.score else { return false }
+                var trial = machine
+                trial[category] = candidate
+                // Slots still waiting on another fault don't count as problems.
+                return Compatibility.check(trial).allSatisfy {
+                    if case .missingPart = $0 { return true }
+                    return false
+                }
+            }
+            .min { $0.basePrice < $1.basePrice }
+    }
+
     // MARK: - Budget-aware assembly
 
-    /// One attempt at a valid build under `ceiling`, using only parts
-    /// unlocked at `level`. Each slot filters to what is still affordable,
-    /// so most attempts succeed.
+    private static func randomMachine(ceiling: Int,
+                                      level: Int,
+                                      using rng: inout RandomNumberGenerator) -> PCBuild? {
+        for _ in 0..<40 {
+            if let build = attemptBuild(ceiling: ceiling, level: level, using: &rng) {
+                return build
+            }
+        }
+        return nil
+    }
+
     private static func attemptBuild(ceiling: Int,
                                      level: Int,
                                      using rng: inout RandomNumberGenerator) -> PCBuild? {
         var remaining = ceiling
 
-        // CPU — must leave room for the cheapest possible rest-of-machine.
         let affordableCPUs = PartCatalog.cpus.filter {
             guard $0.unlockLevel <= level, let socket = $0.socket else { return false }
             return $0.basePrice + minimumOverhead(for: socket) <= remaining
@@ -139,7 +252,6 @@ enum OrderGenerator {
               let socket = cpu.socket else { return nil }
         remaining -= cpu.basePrice
 
-        // Motherboard — socket must match, and we still need memory + GPU + PSU.
         let boards = PartCatalog.motherboards.filter {
             $0.unlockLevel <= level
                 && $0.socket == socket
@@ -148,7 +260,6 @@ enum OrderGenerator {
         guard let board = boards.randomElement(using: &rng) else { return nil }
         remaining -= board.basePrice
 
-        // Memory — type must be on the board's list.
         let sticks = PartCatalog.memories.filter {
             guard $0.unlockLevel <= level, let type = $0.memoryType else { return false }
             return board.supportedMemoryTypes.contains(type)
@@ -157,14 +268,12 @@ enum OrderGenerator {
         guard let memory = sticks.randomElement(using: &rng) else { return nil }
         remaining -= memory.basePrice
 
-        // GPU — leave enough for a PSU.
         let gpus = PartCatalog.gpus.filter {
             $0.unlockLevel <= level && $0.basePrice + cheapestPSUPrice <= remaining
         }
         guard let gpu = gpus.randomElement(using: &rng) else { return nil }
         remaining -= gpu.basePrice
 
-        // PSU — smallest one that actually covers the load and fits the money.
         let needed = cpu.powerDraw + gpu.powerDraw + Compatibility.powerHeadroom
         guard let psu = PartCatalog.psus
             .filter({ $0.unlockLevel <= level && $0.watts >= needed && $0.basePrice <= remaining })
@@ -174,11 +283,12 @@ enum OrderGenerator {
         return Compatibility.isValid(build) ? build : nil
     }
 
-    // MARK: - Catalog floors (computed once)
-    //
-    // Lower bounds over the whole catalogue. They only gate the search;
-    // the per-slot filters above do the real work, so a slightly
-    // optimistic floor costs an extra attempt at worst.
+    // MARK: - Helpers
+
+    private static func randomName(using rng: inout RandomNumberGenerator) -> String {
+        "\(firstNames.randomElement(using: &rng) ?? "Alex") "
+        + "\(lastInitials.randomElement(using: &rng) ?? "K.")"
+    }
 
     private static let cheapestMemoryPrice: Int =
         PartCatalog.memories.map(\.basePrice).min() ?? 0
@@ -187,7 +297,6 @@ enum OrderGenerator {
     private static let cheapestPSUPrice: Int =
         PartCatalog.psus.map(\.basePrice).min() ?? 0
 
-    /// Cheapest board + compatible memory + GPU + PSU for a CPU of this socket.
     private static func minimumOverhead(for socket: Socket) -> Int {
         overheadBySocket[socket] ?? Int.max
     }
@@ -213,10 +322,8 @@ enum OrderGenerator {
     }()
 
     /// The cheapest valid build in the catalogue, searched over level-1
-    /// parts only. That is deliberate and it is also sufficient: level-1
-    /// parts are unlocked at every level and are the cheapest in the
-    /// catalogue, so this build is a legal fallback for any shop.
-    /// `testCheapestBuildUsesOnlyStarterParts` guards the assumption.
+    /// parts only — they're unlocked at every level and are the cheapest
+    /// in the catalogue, so this build is a legal fallback for any shop.
     static let cheapestBuild: PCBuild = {
         let cpus = PartCatalog.cpus.filter { $0.unlockLevel == 1 }
         let boards = PartCatalog.motherboards.filter { $0.unlockLevel == 1 }

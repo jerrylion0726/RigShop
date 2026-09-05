@@ -4,10 +4,15 @@
 //
 //  Where the game actually happens.
 //
-//  Every number on this screen is answered from the customer's point of
-//  view, not the part's. A 45-point graphics card is worth 32 points to
-//  a gamer and 9 to someone doing spreadsheets — the player should never
-//  have to do that multiplication in their head.
+//  Two jobs share this screen. A new build is five empty slots. A repair
+//  is a machine that already exists with a dead part in it — four slots
+//  locked, one you have to fill, and every compatibility rule now working
+//  against choices somebody else made.
+//
+//  Every number is answered from the customer's point of view, not the
+//  part's. A 45-point graphics card is worth 32 points to a gamer and 9
+//  to someone doing spreadsheets; the player should never have to do that
+//  multiplication in their head.
 //
 
 import SwiftUI
@@ -35,6 +40,16 @@ private struct ResultBox: Identifiable {
     let outcome: FulfillmentResult
 }
 
+/// What's sitting in one slot right now.
+private enum SlotState {
+    /// Already in the customer's machine. Not yours, not for sale, not movable.
+    case theirs(Part)
+    /// Waiting on you — an empty slot on a new build, or a dead one on a repair.
+    case open
+    /// Something you supplied.
+    case yours(StockItem)
+}
+
 // MARK: - Build screen
 
 struct BuildView: View {
@@ -53,6 +68,10 @@ struct BuildView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    if let repair = order.repair {
+                        SymptomCard(repair: repair)
+                    }
+
                     Scoreboard(order: order,
                                score: weightedScore,
                                cost: cost,
@@ -61,12 +80,15 @@ struct BuildView: View {
                     VStack(spacing: 0) {
                         ForEach(PartCategory.buildOrder, id: \.self) { category in
                             SlotRow(category: category,
-                                    item: item(for: category),
-                                    useCase: order.useCase) {
-                                picking = category
-                            } clear: {
-                                slots.removeValue(forKey: category)
-                            }
+                                    state: slotState(for: category),
+                                    useCase: order.useCase,
+                                    isRepair: order.isRepair,
+                                    choose: {
+                                        if order.slotsToFill.contains(category) {
+                                            picking = category
+                                        }
+                                    },
+                                    clear: { slots.removeValue(forKey: category) })
                             if category != PartCategory.buildOrder.last {
                                 Rectangle().fill(Theme.line).frame(height: 1)
                                     .padding(.leading, 52)
@@ -83,7 +105,7 @@ struct BuildView: View {
                 .padding(.top, 10)
             }
             .background(Theme.ink)
-            .navigationTitle("Build for \(shortName)")
+            .navigationTitle(order.isRepair ? "Repair for \(shortName)" : "Build for \(shortName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.surface, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -112,7 +134,7 @@ struct BuildView: View {
         .sheet(item: $result) { box in
             DeliveryResult(outcome: box.outcome) { dismiss() }
         }
-        .alert("Couldn't deliver",
+        .alert("Couldn't hand it over",
                isPresented: Binding(get: { failure != nil },
                                     set: { if !$0 { failure = nil } })) {
             Button("OK", role: .cancel) { failure = nil }
@@ -132,10 +154,18 @@ struct BuildView: View {
         return store.state.inventory.first { $0.id == id }
     }
 
+    private func slotState(for category: PartCategory) -> SlotState {
+        if let item = item(for: category) { return .yours(item) }
+        if let theirs = order.startingMachine[category] { return .theirs(theirs) }
+        return .open
+    }
+
+    /// Their machine plus whatever you've fitted. For a new build the
+    /// starting machine is empty, so this is just your five parts.
     private var build: PCBuild {
-        var result = PCBuild()
+        var result = order.startingMachine
         for category in PartCategory.buildOrder {
-            result[category] = item(for: category)?.part
+            if let item = item(for: category) { result[category] = item.part }
         }
         return result
     }
@@ -144,7 +174,8 @@ struct BuildView: View {
         PartCategory.buildOrder.compactMap { slots[$0] }
     }
 
-    /// Real cost basis: what each unit actually cost, not the list price.
+    /// Real cost basis: what each unit actually cost you. Parts already in
+    /// the customer's machine cost the shop nothing.
     private var cost: Int {
         chosenIDs.compactMap { id in
             store.state.inventory.first { $0.id == id }?.paidPrice
@@ -161,9 +192,16 @@ struct BuildView: View {
 
     private var deliverLabel: String {
         let missing = build.missingCategories.count
-        if missing > 0 { return missing == 1 ? "1 slot empty" : "\(missing) slots empty" }
+        if missing > 0 {
+            if order.isRepair {
+                return missing == 1 ? "Still one dead part" : "Still \(missing) dead parts"
+            }
+            return missing == 1 ? "1 slot empty" : "\(missing) slots empty"
+        }
         if !issues.isEmpty { return "Won't run yet" }
-        return "Deliver for \(order.budget.money)"
+        return order.isRepair
+            ? "Hand it back for \(order.budget.money)"
+            : "Deliver for \(order.budget.money)"
     }
 
     // MARK: Action
@@ -178,8 +216,42 @@ struct BuildView: View {
             case .partsNotInStock:  failure = "Some of those parts aren't on the shelf anymore."
             case .incompatible(let list):
                 failure = list.first?.message ?? "That machine won't run."
+            case .faultNotReplaced(let category):
+                failure = "The dead \(category.displayName.lowercased()) is still in there."
             }
         }
+    }
+}
+
+// MARK: - Symptom
+
+private struct SymptomCard: View {
+    let repair: RepairJob
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "quote.opening")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                Text(repair.symptom)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 7) {
+                Image(systemName: "wrench.and.screwdriver.fill")
+                    .font(.system(size: 10))
+                Text(repair.diagnosis)
+                    .font(.spec(11, .semibold))
+            }
+            .foregroundStyle(Theme.fault)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
+        .padding(.horizontal, 16)
     }
 }
 
@@ -195,8 +267,9 @@ private struct Scoreboard: View {
         order.name.split(separator: " ").first.map(String.init) ?? order.name
     }
 
+    private var scrap: Int { order.repair?.scrapValue ?? 0 }
     private var meetsTarget: Bool { score >= order.expectedScore }
-    private var profit: Int { order.budget - cost }
+    private var profit: Int { order.budget + scrap - cost }
 
     /// The bar reaches the target marker at the requirement, with room
     /// beyond it so overshoot is visible rather than pegged.
@@ -252,11 +325,17 @@ private struct Scoreboard: View {
             Rectangle().fill(Theme.line).frame(height: 1)
 
             HStack(spacing: 0) {
-                figure("COST", cost.money, Theme.text)
-                figure("PAYS", order.budget.money, Theme.gold)
+                figure("YOUR PARTS", cost.money, Theme.text)
+                figure(order.isRepair ? "FEE" : "PAYS", order.budget.money, Theme.gold)
                 figure("PROFIT",
                        (profit >= 0 ? "+" : "") + profit.money,
                        profit >= 0 ? Theme.solder : Theme.fault)
+            }
+
+            if scrap > 0 {
+                Text("Includes \(scrap.money) scrap credit for the dead parts.")
+                    .font(.spec(9))
+                    .foregroundStyle(Theme.muted)
             }
         }
         .padding(16)
@@ -265,8 +344,16 @@ private struct Scoreboard: View {
     }
 
     private var hint: String {
-        if !isComplete { return "Fill every slot to see whether this machine ships." }
-        if !meetsTarget { return "Under target — \(shortName) won't be impressed." }
+        if !isComplete {
+            return order.isRepair
+                ? "Fit the dead slot and the machine comes back to life."
+                : "Fill every slot to see whether this machine ships."
+        }
+        if !meetsTarget {
+            return order.isRepair
+                ? "Weaker than what died — \(shortName) will notice."
+                : "Under target — \(shortName) won't be impressed."
+        }
         if score - order.expectedScore > order.expectedScore / 3 {
             return "Well over target. They pay the same either way — that's margin you're giving away."
         }
@@ -286,54 +373,109 @@ private struct Scoreboard: View {
 
 private struct SlotRow: View {
     let category: PartCategory
-    let item: StockItem?
+    let state: SlotState
     let useCase: UseCase
+    let isRepair: Bool
     let choose: () -> Void
     let clear: () -> Void
 
+    private var locked: Bool {
+        if case .theirs = state { return true }
+        return false
+    }
+
     var body: some View {
-        Button(action: choose) {
+        Button(action: { if !locked { choose() } }) {
             HStack(spacing: 12) {
                 Image(systemName: category.symbol)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(item == nil ? Theme.muted : category.tint)
+                    .foregroundStyle(iconTint)
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(category.displayName.uppercased())
-                        .font(.spec(8, .semibold)).tracking(1.1)
-                        .foregroundStyle(Theme.muted)
-                    Text(item?.part.name ?? "Tap to choose")
+                    HStack(spacing: 6) {
+                        Text(category.displayName.uppercased())
+                            .font(.spec(8, .semibold)).tracking(1.1)
+                            .foregroundStyle(Theme.muted)
+                        if locked {
+                            Text("THEIRS")
+                                .font(.spec(7, .semibold)).tracking(0.8)
+                                .foregroundStyle(Theme.muted)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Theme.raised))
+                        }
+                    }
+                    Text(title)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(item == nil ? Theme.muted : Theme.text)
+                        .foregroundStyle(titleTint)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 6)
 
-                if let item {
-                    if let points = item.part.contribution(for: useCase) {
-                        Text("+\(points)")
-                            .font(.spec(14, .semibold))
-                            .foregroundStyle(category.tint)
-                    }
-                    Button(action: clear) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.muted)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Theme.muted)
-                }
+                trailing
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(locked)
+    }
+
+    private var title: String {
+        switch state {
+        case .theirs(let part):  return part.name
+        case .yours(let item):   return item.part.name
+        case .open:              return isRepair ? "Dead — tap to replace" : "Tap to choose"
+        }
+    }
+
+    private var titleTint: Color {
+        switch state {
+        case .theirs:  return Theme.muted
+        case .yours:   return Theme.text
+        case .open:    return isRepair ? Theme.fault : Theme.muted
+        }
+    }
+
+    private var iconTint: Color {
+        switch state {
+        case .theirs:  return Theme.muted.opacity(0.7)
+        case .yours:   return category.tint
+        case .open:    return isRepair ? Theme.fault : Theme.muted
+        }
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch state {
+        case .theirs(let part):
+            if let points = part.contribution(for: useCase) {
+                Text("+\(points)")
+                    .font(.spec(13, .semibold))
+                    .foregroundStyle(Theme.muted)
+            }
+        case .yours(let item):
+            HStack(spacing: 10) {
+                if let points = item.part.contribution(for: useCase) {
+                    Text("+\(points)")
+                        .font(.spec(14, .semibold))
+                        .foregroundStyle(category.tint)
+                }
+                Button(action: clear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Theme.muted)
+                }
+                .buttonStyle(.plain)
+            }
+        case .open:
+            Image(systemName: isRepair ? "exclamationmark.triangle.fill" : "plus.circle")
+                .font(.system(size: 15))
+                .foregroundStyle(isRepair ? Theme.fault : Theme.muted)
+        }
     }
 }
 
@@ -429,6 +571,12 @@ private struct DeliveryResult: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.text)
 
+            if outcome.wasRepair {
+                Text("Machine repaired and handed back.")
+                    .font(.spec(11))
+                    .foregroundStyle(Theme.muted)
+            }
+
             HStack(spacing: 0) {
                 figure("SATISFACTION", "\(outcome.satisfaction)%", mood.tint)
                 Rectangle().fill(Theme.line).frame(width: 1, height: 34)
@@ -445,6 +593,12 @@ private struct DeliveryResult: View {
             .padding(.vertical, 14)
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
             .padding(.horizontal, 18)
+
+            if outcome.scrap > 0 {
+                Text("\(outcome.scrap.money) scrap credit for the dead parts.")
+                    .font(.spec(10))
+                    .foregroundStyle(Theme.muted)
+            }
 
             if let level = outcome.newLevel {
                 VStack(spacing: 4) {

@@ -9,9 +9,9 @@
 //  you would have to leave, guess what to buy, and come back. Buying from
 //  here means every purchase is made against a target you can see.
 //
-//  When nothing in the list can be picked, the screen says so and says
-//  what to do about it. A wall of greyed-out rows with no explanation
-//  reads as a broken app, not as scarcity.
+//  On a repair the compatibility check runs against the customer's whole
+//  machine, so a part is greyed out because it won't fit *their* board,
+//  not yours.
 //
 
 import SwiftUI
@@ -112,7 +112,6 @@ struct PartPicker: View {
             || offers.contains { blockReason(for: $0.part) == nil && affordability($0) == nil }
     }
 
-    /// Everything visible is compatible, but too expensive.
     private var blockedOnlyByMoney: Bool {
         !offers.isEmpty
             && offers.allSatisfy { blockReason(for: $0.part) == nil }
@@ -130,6 +129,12 @@ struct PartPicker: View {
         if blockedOnlyByMoney {
             return "These all fit, but you can't afford any of them. "
                  + "Dump something from inventory to free up cash, or take a cheaper job first."
+        }
+        // On a repair the fixed parts belong to the customer — telling the
+        // player to change a slot would be advice they can't act on.
+        if order.isRepair {
+            return "Nothing here fits their machine. You can't swap the parts they "
+                 + "already own, so close up and see what the supplier brings tomorrow."
         }
         return "Nothing here works with the parts you've already slotted. "
              + "Tap the ✕ on a slot to change it, or close up — the supplier restocks tomorrow."

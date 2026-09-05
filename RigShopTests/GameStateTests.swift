@@ -35,7 +35,14 @@ final class GameStateTests: XCTestCase {
         XCTAssertFalse(state.orders.isEmpty)
     }
 
-    /// The player must never be structurally unable to build.
+    /// A lean opening till only works if day-one jobs are fundable. The
+    /// cheapest legal machine has to fit inside what the shop starts with.
+    func testStartingCashCoversTheCheapestMachine() {
+        XCTAssertGreaterThan(GameState.startingCash,
+                             OrderGenerator.cheapestBuild.partsCost,
+                             "You can't build anything on day one")
+    }
+
     func testMarketAlwaysOffersEveryCategory() {
         var rng = makeRNG()
         for level in 1...ShopLevel.maxLevel {
@@ -49,7 +56,6 @@ final class GameStateTests: XCTestCase {
         }
     }
 
-    /// The whole point of the unlock ladder.
     func testMarketNeverOffersLockedParts() {
         var rng = makeRNG()
         for level in 1...ShopLevel.maxLevel {
@@ -139,6 +145,7 @@ final class GameStateTests: XCTestCase {
     func testCannotBuyMoreThanStock() {
         var rng = makeRNG()
         var state = GameState.newGame(using: &rng)
+        state.cash = 100_000          // take money out of the picture
         let listing = state.market[0]
         let available = listing.stock
 
@@ -197,6 +204,8 @@ final class GameStateTests: XCTestCase {
         case .success(let outcome):
             XCTAssertEqual(outcome.revenue, 1200)
             XCTAssertEqual(state.cash, cashBefore + 1200)
+            XCTAssertFalse(outcome.wasRepair)
+            XCTAssertEqual(outcome.scrap, 0)
             XCTAssertTrue(state.inventory.isEmpty, "Parts should leave the shelf")
             XCTAssertTrue(state.orders.isEmpty, "Order should be closed")
             XCTAssertEqual(outcome.satisfaction, 100)
@@ -295,7 +304,7 @@ final class GameStateTests: XCTestCase {
 
         for _ in 0..<30 {
             for order in state.orders {
-                if let ids = greedySolution(for: order, in: &state, using: &rng) {
+                if let ids = greedySolution(for: order, in: &state) {
                     _ = state.fulfill(orderID: order.id, using: ids)
                 }
             }
@@ -312,14 +321,15 @@ final class GameStateTests: XCTestCase {
         XCTAssertFalse(state.log.isEmpty)
     }
 
-    /// A shop that actually serves customers should climb the ladder.
+    /// A shop that actually serves customers should climb the ladder — and
+    /// with a lean opening till it has to survive the first week to do it.
     func testSimulationMakesProgressUpTheLadder() {
         var rng = makeRNG(777)
         var state = GameState.newGame(using: &rng)
 
         for _ in 0..<40 {
             for order in state.orders {
-                if let ids = greedySolution(for: order, in: &state, using: &rng) {
+                if let ids = greedySolution(for: order, in: &state) {
                     _ = state.fulfill(orderID: order.id, using: ids)
                 }
             }
@@ -329,24 +339,34 @@ final class GameStateTests: XCTestCase {
         XCTAssertGreaterThan(state.completedOrders, 10,
                              "Forty days of trading should close more than ten orders")
         XCTAssertGreaterThan(state.level, 1, "The shop never levelled up")
+        XCTAssertGreaterThan(state.cash, GameState.startingCash,
+                             "Forty days of trading should leave the shop better off")
     }
 
-    /// Buy whatever is needed, cheapest first, to satisfy one order.
-    /// Deliberately dumb — the point is to exercise the state machine,
-    /// not to play well.
+    /// Fill only the slots this job actually needs, cheapest first, and
+    /// prefer something no weaker than what died on a repair.
+    ///
+    /// Deliberately dumb — the point is to exercise the state machine, not
+    /// to play well. It does have to understand repairs though: buying all
+    /// five parts for a one-part job loses money on every repair in the run.
     private func greedySolution(for order: CustomerOrder,
-                                in state: inout GameState,
-                                using rng: inout RandomNumberGenerator) -> [UUID]? {
-        var build = PCBuild()
+                                in state: inout GameState) -> [UUID]? {
+        var build = order.startingMachine
         var ids: [UUID] = []
 
-        for category in PartCategory.buildOrder {
-            if let owned = state.stock(in: category)
-                .first(where: { Compatibility.canAdd($0.part, to: build) && !ids.contains($0.id) }) {
-                build[category] = owned.part
-                ids.append(owned.id)
+        for category in PartCategory.buildOrder where order.slotsToFill.contains(category) {
+            let floor = order.repair?.machine[category]?.score ?? 0
+
+            // Something on the shelf that fits, ideally not a downgrade.
+            let owned = state.stock(in: category)
+                .filter { Compatibility.canAdd($0.part, to: build) && !ids.contains($0.id) }
+            if let pick = owned.first(where: { $0.part.score >= floor }) ?? owned.first {
+                build[category] = pick.part
+                ids.append(pick.id)
                 continue
             }
+
+            // Otherwise buy the cheapest listing that fits and clears the floor.
             let options = state.market
                 .filter { $0.part.category == category
                         && $0.stock > 0
@@ -354,7 +374,8 @@ final class GameStateTests: XCTestCase {
                         && Compatibility.canAdd($0.part, to: build) }
                 .sorted { $0.todayPrice < $1.todayPrice }
 
-            guard let pick = options.first, state.buy(pick) else { return nil }
+            let choice = options.first(where: { $0.part.score >= floor }) ?? options.first
+            guard let pick = choice, state.buy(pick) else { return nil }
             guard let bought = state.inventory.last else { return nil }
             build[category] = bought.part
             ids.append(bought.id)

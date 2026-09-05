@@ -8,6 +8,10 @@
 //  live invisibly inside the data — customers give up after three days —
 //  is now something you can see on their face.
 //
+//  The bubble over their head says why they're here: a controller, a
+//  film reel or a document for a new build, a wrench for a repair. You
+//  can tell what kind of day it is by glancing at the floor.
+//
 
 import SwiftUI
 
@@ -28,9 +32,15 @@ struct CustomerFigure: View {
         return Theme.Shop.shirts[byte % Theme.Shop.shirts.count]
     }
 
+    private var bubbleSymbol: String {
+        order.isRepair ? "wrench.and.screwdriver.fill" : order.useCase.symbol
+    }
+
     var body: some View {
         VStack(spacing: 3) {
-            WantBubble(symbol: order.useCase.symbol, urgent: patienceLeft <= 0.34)
+            WantBubble(symbol: bubbleSymbol,
+                       urgent: patienceLeft <= 0.34,
+                       repair: order.isRepair)
 
             ZStack(alignment: .bottom) {
                 // Body
@@ -58,8 +68,10 @@ struct CustomerFigure: View {
         )
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(order.name), wants \(order.useCase.displayName)")
-        .accessibilityHint("Budget \(order.budget.money)")
+        .accessibilityLabel(order.isRepair
+                            ? "\(order.name), machine needs repair"
+                            : "\(order.name), wants \(order.useCase.displayName)")
+        .accessibilityHint("Pays \(order.budget.money)")
     }
 }
 
@@ -76,7 +88,6 @@ private struct Face: View {
             ZStack {
                 Circle().fill(Theme.Shop.skin)
 
-                // Eyes
                 HStack(spacing: w * 0.22) {
                     eye(w)
                     eye(w)
@@ -87,7 +98,6 @@ private struct Face: View {
                 Path { p in
                     let left  = CGPoint(x: w * 0.34, y: h * 0.66)
                     let right = CGPoint(x: w * 0.66, y: h * 0.66)
-                    // +0.14 at full patience, -0.10 at none.
                     let bend = h * (patience * 0.24 - 0.10)
                     p.move(to: left)
                     p.addQuadCurve(to: right,
@@ -111,6 +121,7 @@ private struct Face: View {
 private struct WantBubble: View {
     let symbol: String
     let urgent: Bool
+    let repair: Bool
 
     var body: some View {
         Image(systemName: symbol)
@@ -119,7 +130,7 @@ private struct WantBubble: View {
             .frame(width: 22, height: 20)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(urgent ? Theme.fault : Theme.text)
+                    .fill(urgent ? Theme.fault : (repair ? Theme.gold : Theme.text))
             )
     }
 }

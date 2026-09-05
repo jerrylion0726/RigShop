@@ -301,16 +301,35 @@ private struct OrderCard: View {
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Theme.text)
 
-                Text(order.useCase.request)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.muted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 30)
+                if let repair = order.repair {
+                    Text("“\(repair.symptom)”")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 26)
+
+                    HStack(spacing: 7) {
+                        Image(systemName: "wrench.and.screwdriver.fill")
+                            .font(.system(size: 10))
+                        Text(repair.diagnosis)
+                            .font(.spec(11, .semibold))
+                    }
+                    .foregroundStyle(Theme.fault)
+                } else {
+                    Text(order.useCase.request)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
 
                 HStack(spacing: 0) {
-                    figure("BUDGET", order.budget.money, Theme.gold, sub: "you get paid this")
+                    figure(order.isRepair ? "FEE" : "BUDGET",
+                           order.budget.money, Theme.gold,
+                           sub: "you get paid this")
                     Rectangle().fill(Theme.line).frame(width: 1, height: 44)
-                    figure("TARGET", "\(order.expectedScore) pts", Theme.text,
+                    figure(order.isRepair ? "RESTORE TO" : "TARGET",
+                           "\(order.expectedScore) pts", Theme.text,
                            sub: tier.rawValue, subTint: tier.tint)
                     Rectangle().fill(Theme.line).frame(width: 1, height: 44)
                     figure("DAYS LEFT", "\(CustomerOrder.patience - order.daysWaiting)",
@@ -320,10 +339,13 @@ private struct OrderCard: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
                 .padding(.horizontal, 18)
 
-                WeightBreakdown(order: order)
+                if let repair = order.repair {
+                    TheirMachine(repair: repair)
+                } else {
+                    WeightBreakdown(order: order)
+                }
 
-                Text("Reach \(order.expectedScore) and \(shortName) is happy. "
-                     + "Going far past it earns nothing extra — that's your own money.")
+                Text(footnote)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
@@ -338,7 +360,9 @@ private struct OrderCard: View {
         // bottom edge competes with the home-indicator gesture area.
         .safeAreaInset(edge: .bottom) {
             Button(action: build) {
-                Label("Build for \(shortName)", systemImage: "wrench.and.screwdriver.fill")
+                Label(order.isRepair ? "Repair for \(shortName)" : "Build for \(shortName)",
+                      systemImage: order.isRepair
+                        ? "wrench.and.screwdriver.fill" : "hammer.fill")
                     .font(.spec(14, .semibold))
                     .foregroundStyle(Theme.ink)
                     .frame(maxWidth: .infinity)
@@ -354,6 +378,15 @@ private struct OrderCard: View {
         .presentationDetents([.medium, .large])
     }
 
+    private var footnote: String {
+        if order.isRepair {
+            return "Fit something no weaker than what died and \(shortName) is happy. "
+                 + "The parts already in the machine are theirs — you only pay for the swap."
+        }
+        return "Reach \(order.expectedScore) and \(shortName) is happy. "
+             + "Going far past it earns nothing extra — that's your own money."
+    }
+
     private func figure(_ label: String,
                         _ value: String,
                         _ tint: Color,
@@ -366,6 +399,45 @@ private struct OrderCard: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - The machine they brought in
+
+private struct TheirMachine: View {
+    let repair: RepairJob
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("WHAT THEY BROUGHT IN")
+                .font(.spec(9, .semibold)).tracking(1.1)
+                .foregroundStyle(Theme.muted)
+
+            ForEach(PartCategory.buildOrder, id: \.self) { category in
+                if let part = repair.machine[category] {
+                    let dead = repair.faults.contains(category)
+                    HStack(spacing: 8) {
+                        Image(systemName: category.symbol)
+                            .font(.system(size: 10))
+                            .foregroundStyle(dead ? Theme.fault : Theme.muted)
+                            .frame(width: 16)
+                        Text(part.name)
+                            .font(.spec(11))
+                            .foregroundStyle(dead ? Theme.fault : Theme.muted)
+                            .strikethrough(dead, color: Theme.fault)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if dead {
+                            Text("DEAD")
+                                .font(.spec(8, .semibold)).tracking(0.8)
+                                .foregroundStyle(Theme.fault)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

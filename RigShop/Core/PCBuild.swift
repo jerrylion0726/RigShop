@@ -2,14 +2,18 @@
 //  PCBuild.swift
 //  RigShop
 //
-//  A machine under assembly. Slots may be empty while the player works.
+//  A machine. Slots may be empty while the player works, and a repair
+//  customer arrives with most of them already filled.
+//
+//  Codable because a repair job carries the customer's existing machine,
+//  and that has to survive a save.
 //
 //  Do NOT import SwiftUI in this file.
 //
 
 import Foundation
 
-struct PCBuild: Equatable {
+struct PCBuild: Equatable, Codable, Hashable {
     var cpu: Part?
     var motherboard: Part?
     var memory: Part?
@@ -43,8 +47,8 @@ extension PCBuild {
 
     var isComplete: Bool { missingCategories.isEmpty }
 
-    /// What this build cost the shop, at the prices actually paid.
-    /// Uses base price here; the real cost basis is tracked in Step 7.
+    /// Reference cost of everything slotted. The real cost basis for a
+    /// player's build comes from StockItem.paidPrice, not from here.
     var partsCost: Int {
         parts.reduce(0) { $0 + $1.basePrice }
     }
@@ -74,5 +78,13 @@ extension PCBuild {
             case .psu:         psu = newValue
             }
         }
+    }
+
+    /// The same machine with these slots emptied — how a repair customer's
+    /// machine looks once the dead parts are pulled out.
+    func removing(_ categories: [PartCategory]) -> PCBuild {
+        var result = self
+        for category in categories { result[category] = nil }
+        return result
     }
 }
