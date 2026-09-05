@@ -5,10 +5,14 @@
 //  Customers, what they want, and how happy they end up.
 //
 //  Two kinds of job walk through the door. A new build is five empty
-//  slots. A repair is a machine that already exists with one or two dead
-//  parts in it — the same compatibility rules, read backwards: instead of
-//  choosing five parts that agree with each other, you're finding the one
-//  part that agrees with four you didn't pick.
+//  slots. A repair is a machine that already exists with a dead part in
+//  it — the same compatibility rules, read backwards: instead of choosing
+//  five parts that agree with each other, you're finding the one part
+//  that agrees with four you didn't pick.
+//
+//  Every slot carries weight. A machine is only as good as the part
+//  holding it back, so starving a fast card of memory shows up in the
+//  score the same way a weak card does.
 //
 //  Do NOT import SwiftUI in this file.
 //
@@ -32,16 +36,45 @@ enum UseCase: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// What the customer actually cares about.
-    var cpuWeight: Double {
+    /// How much this customer's workload leans on each slot.
+    /// The five weights always sum to 1, so the weighted score stays on
+    /// the same scale as an individual part's score.
+    func weight(for category: PartCategory) -> Double {
         switch self {
-        case .gaming:  return 0.3
-        case .editing: return 0.6
-        case .office:  return 0.8
+        case .gaming:
+            switch category {
+            case .cpu:         return 0.25
+            case .gpu:         return 0.55
+            case .memory:      return 0.10
+            case .motherboard: return 0.06
+            case .psu:         return 0.04
+            }
+        case .editing:
+            switch category {
+            case .cpu:         return 0.45
+            case .gpu:         return 0.28
+            case .memory:      return 0.18
+            case .motherboard: return 0.05
+            case .psu:         return 0.04
+            }
+        case .office:
+            switch category {
+            case .cpu:         return 0.55
+            case .gpu:         return 0.12
+            case .memory:      return 0.24
+            case .motherboard: return 0.05
+            case .psu:         return 0.04
+            }
         }
     }
 
-    var gpuWeight: Double { 1.0 - cpuWeight }
+    /// Slots in order of how much this customer cares, heaviest first.
+    /// Used by the order card to say where the money should go.
+    var weightedSlots: [(category: PartCategory, weight: Double)] {
+        PartCategory.buildOrder
+            .map { ($0, weight(for: $0)) }
+            .sorted { $0.1 > $1.1 }
+    }
 
     /// Flavour text shown on a new-build order card.
     var request: String {
@@ -158,11 +191,15 @@ struct CustomerOrder: Identifiable, Codable, Equatable {
 enum Scoring {
 
     /// Weighted performance of a build, for this customer's use case.
+    /// Every fitted part contributes; an empty slot contributes nothing,
+    /// which is why an unfinished machine always scores low.
     static func weightedScore(of build: PCBuild, for useCase: UseCase) -> Int {
-        let cpu = Double(build.cpu?.score ?? 0)
-        let gpu = Double(build.gpu?.score ?? 0)
-        let raw = cpu * useCase.cpuWeight + gpu * useCase.gpuWeight
-        return Int(raw.rounded())
+        var total = 0.0
+        for category in PartCategory.buildOrder {
+            guard let part = build[category] else { continue }
+            total += Double(part.score) * useCase.weight(for: category)
+        }
+        return Int(total.rounded())
     }
 
     /// 0–100. Above expectation earns nothing extra — overbuilding

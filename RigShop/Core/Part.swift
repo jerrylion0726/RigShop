@@ -53,10 +53,10 @@ enum MemoryType: String, Codable, Hashable, CaseIterable {
 /// Using an enum with associated values means a power supply
 /// *cannot* have a CPU socket — the compiler rejects it.
 enum Spec: Codable, Hashable {
-    case cpu(socket: Socket, powerDraw: Int, score: Int)
+    case cpu(socket: Socket, powerDraw: Int)
     case motherboard(socket: Socket, memoryTypes: [MemoryType])
     case memory(type: MemoryType, capacityGB: Int)
-    case gpu(powerDraw: Int, score: Int)
+    case gpu(powerDraw: Int)
     case psu(watts: Int)
 }
 
@@ -72,17 +72,28 @@ struct Part: Identifiable, Codable, Hashable {
     /// Shop level required before the supplier will carry this part.
     /// 1 means available from day one; 10 is the top of the ladder.
     let unlockLevel: Int
+    /// How much this part contributes to a machine's performance.
+    ///
+    /// Every part scores, not just the processor and graphics card. A
+    /// fast card paired with 8GB of memory still stutters, and a machine
+    /// is only as good as the part holding it back — so memory capacity,
+    /// board tier and power quality all carry weight. Entry level sits
+    /// near 12; the halo parts run past 100. Satisfaction compares
+    /// ratios, not absolutes, so the scale has no ceiling it must respect.
+    let score: Int
     let spec: Spec
 
     init(id: String,
          name: String,
          basePrice: Int,
          unlockLevel: Int = 1,
+         score: Int,
          spec: Spec) {
         self.id = id
         self.name = name
         self.basePrice = basePrice
         self.unlockLevel = unlockLevel
+        self.score = score
         self.spec = spec
     }
 }
@@ -107,7 +118,7 @@ extension Part {
     /// CPUs and motherboards only. `nil` for everything else.
     var socket: Socket? {
         switch spec {
-        case .cpu(let socket, _, _):      return socket
+        case .cpu(let socket, _):         return socket
         case .motherboard(let socket, _): return socket
         default:                          return nil
         }
@@ -116,20 +127,9 @@ extension Part {
     /// Peak wattage drawn under load. Only CPUs and GPUs draw meaningful power.
     var powerDraw: Int {
         switch spec {
-        case .cpu(_, let watts, _): return watts
-        case .gpu(let watts, _):    return watts
-        default:                    return 0
-        }
-    }
-
-    /// Relative performance score. Entry level sits near 12; the halo
-    /// parts run past 100. Satisfaction compares ratios, not absolutes,
-    /// so the scale has no ceiling it needs to respect.
-    var score: Int {
-        switch spec {
-        case .cpu(_, _, let score): return score
-        case .gpu(_, let score):    return score
-        default:                    return 0
+        case .cpu(_, let watts): return watts
+        case .gpu(let watts):    return watts
+        default:                 return 0
         }
     }
 
@@ -164,13 +164,13 @@ extension Part {
     /// One-line spec summary for list rows.
     var specSummary: String {
         switch spec {
-        case .cpu(let socket, let power, _):
+        case .cpu(let socket, let power):
             return "\(socket.rawValue) · \(power)W"
         case .motherboard(let socket, let types):
             return "\(socket.rawValue) · \(types.map(\.rawValue).joined(separator: "/"))"
         case .memory(let type, let gb):
             return "\(gb)GB \(type.rawValue)"
-        case .gpu(let power, _):
+        case .gpu(let power):
             return "\(power)W"
         case .psu(let watts):
             return "\(watts)W"

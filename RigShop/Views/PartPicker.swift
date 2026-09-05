@@ -9,6 +9,10 @@
 //  you would have to leave, guess what to buy, and come back. Buying from
 //  here means every purchase is made against a target you can see.
 //
+//  Each row carries two numbers: what the part scores on its own, and
+//  what that's worth to this customer once their weighting is applied.
+//  The second number is the one that decides the job.
+//
 //  On a repair the compatibility check runs against the customer's whole
 //  machine, so a part is greyed out because it won't fit *their* board,
 //  not yours.
@@ -27,10 +31,18 @@ struct PartPicker: View {
     let usedIDs: Set<UUID>
     let onPick: (UUID) -> Void
 
+    private var weightPercent: Int {
+        Int((order.useCase.weight(for: category) * 100).rounded())
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    WeightNote(category: category,
+                               percent: weightPercent,
+                               useCase: order.useCase)
+
                     if let advice = deadEndAdvice {
                         DeadEnd(text: advice)
                     }
@@ -81,7 +93,9 @@ struct PartPicker: View {
     // MARK: Data
 
     private var owned: [StockItem] {
-        store.state.stock(in: category).filter { !usedIDs.contains($0.id) }
+        store.state.stock(in: category)
+            .filter { !usedIDs.contains($0.id) }
+            .sorted { $0.part.score > $1.part.score }
     }
 
     private var offers: [MarketListing] {
@@ -141,6 +155,47 @@ struct PartPicker: View {
     }
 }
 
+// MARK: - Weight note
+//
+// Says up front how much this slot is worth to the person waiting. It
+// stops the player overspending on a slot the customer barely notices.
+
+private struct WeightNote: View {
+    let category: PartCategory
+    let percent: Int
+    let useCase: UseCase
+
+    private var advice: String {
+        switch percent {
+        case ..<8:  return "barely moves their score — buy the cheap one that fits"
+        case ..<15: return "a small slice of their score"
+        case ..<30: return "worth real points here"
+        default:    return "this is where their score comes from"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: category.symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(category.tint)
+            Text("\(percent)% of a \(useCase.displayName.lowercased()) score")
+                .font(.spec(10, .semibold))
+                .foregroundStyle(Theme.text)
+            Text("· \(advice)")
+                .font(.spec(9))
+                .foregroundStyle(Theme.muted)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 11).fill(Theme.surface))
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+    }
+}
+
 // MARK: - Dead end banner
 
 private struct DeadEnd: View {
@@ -160,7 +215,7 @@ private struct DeadEnd: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 11).fill(Theme.gold.opacity(0.13)))
         .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.top, 10)
     }
 }
 
@@ -253,7 +308,7 @@ private struct PartRow: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text(part.specSummary)
+                        Text("\(part.specSummary) · \(part.score) pts")
                             .font(.spec(10))
                             .foregroundStyle(Theme.muted)
                     }
@@ -262,19 +317,18 @@ private struct PartRow: View {
 
                 Spacer(minLength: 8)
 
-                // What this part is worth to *this* customer.
-                if let points = part.contribution(for: order.useCase) {
-                    VStack(spacing: 0) {
-                        Text("+\(points)")
-                            .font(.spec(15, .bold))
-                            .foregroundStyle(part.category.tint)
-                        Text("PTS")
-                            .font(.spec(7, .semibold)).tracking(0.7)
-                            .foregroundStyle(Theme.muted)
-                    }
-                    .frame(minWidth: 34)
-                    .padding(.trailing, 10)
+                // What this part is worth to *this* customer, after their
+                // weighting. The raw score sits in the line above.
+                VStack(spacing: 0) {
+                    Text("+\(part.contribution(for: order.useCase))")
+                        .font(.spec(15, .bold))
+                        .foregroundStyle(part.category.tint)
+                    Text("TO THEM")
+                        .font(.spec(6, .semibold)).tracking(0.6)
+                        .foregroundStyle(Theme.muted)
                 }
+                .frame(minWidth: 40)
+                .padding(.trailing, 10)
 
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(trailingLabel)
@@ -293,6 +347,6 @@ private struct PartRow: View {
         .buttonStyle(.plain)
         .disabled(blocked != nil)
         .accessibilityLabel(part.name)
-        .accessibilityHint(blocked ?? "Select")
+        .accessibilityHint(blocked ?? "Adds \(part.contribution(for: order.useCase)) points")
     }
 }

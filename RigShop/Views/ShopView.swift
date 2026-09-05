@@ -8,10 +8,9 @@
 //
 //  Red means the price went up, which is bad news for a buyer.
 //
-//  CPUs and graphics cards carry a performance score; boards, memory
-//  and power supplies do not. Those three decide whether the machine
-//  runs at all, not how fast it is, so showing them a score would be
-//  a lie.
+//  Every part carries a score now, including memory, boards and power
+//  supplies. What each one is worth still depends on who's asking, and
+//  that maths lives on the build screen where a customer is in view.
 //
 
 import SwiftUI
@@ -61,13 +60,14 @@ struct ShopView: View {
 private struct CategoryHeader: View {
     let category: PartCategory
 
-    /// Only two categories move the performance needle. Saying so in the
-    /// header saves the player from hunting for a score that isn't there.
-    private var note: String? {
+    /// What this slot is really buying you, beyond the raw number.
+    private var note: String {
         switch category {
-        case .cpu, .gpu:              return "scored"
-        case .motherboard, .memory:   return "compatibility only"
-        case .psu:                    return "must cover the load"
+        case .cpu:          return "compute"
+        case .gpu:          return "graphics"
+        case .memory:       return "capacity"
+        case .motherboard:  return "socket + tier"
+        case .psu:          return "must cover the load"
         }
     }
 
@@ -78,11 +78,9 @@ private struct CategoryHeader: View {
             Text(category.displayName.uppercased())
                 .font(.spec(11, .semibold))
                 .tracking(1.4)
-            if let note {
-                Text("· \(note)")
-                    .font(.spec(9))
-                    .foregroundStyle(Theme.muted)
-            }
+            Text("· \(note)")
+                .font(.spec(9))
+                .foregroundStyle(Theme.muted)
             Spacer()
         }
         .foregroundStyle(category.tint)
@@ -99,11 +97,6 @@ private struct ListingRow: View {
     let listing: MarketListing
 
     private var blocked: String? { store.blockReason(for: listing) }
-
-    /// Scores exist for CPUs and GPUs only.
-    private var showsScore: Bool {
-        listing.part.category == .cpu || listing.part.category == .gpu
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -129,11 +122,9 @@ private struct ListingRow: View {
 
             Spacer(minLength: 6)
 
-            if showsScore {
-                ScoreBadge(score: listing.part.score,
-                           tint: listing.part.category.tint)
-                    .padding(.trailing, 10)
-            }
+            ScoreBadge(score: listing.part.score,
+                       tint: listing.part.category.tint)
+                .padding(.trailing, 10)
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(listing.todayPrice.money)
@@ -151,20 +142,16 @@ private struct ListingRow: View {
         .padding(.vertical, 11)
         .opacity(blocked == nil ? 1 : 0.45)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityLabel("\(listing.part.name), \(listing.todayPrice.money), "
+                            + "scores \(listing.part.score)")
         .accessibilityHint(blocked ?? "Buy one")
-    }
-
-    private var accessibilityText: String {
-        let base = "\(listing.part.name), \(listing.todayPrice.money)"
-        return showsScore ? base + ", scores \(listing.part.score)" : base
     }
 }
 
 // MARK: - Score badge
 //
-// The number that decides whether a customer walks away happy.
-// Everything else on this row is a constraint; this is the value.
+// A part's own rating, before any customer weighs in on it. What it's
+// worth to a particular job is shown on the build screen.
 
 private struct ScoreBadge: View {
     let score: Int

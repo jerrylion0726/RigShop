@@ -341,9 +341,9 @@ private struct OrderCard: View {
 
                 if let repair = order.repair {
                     TheirMachine(repair: repair)
-                } else {
-                    WeightBreakdown(order: order)
                 }
+
+                WeightBreakdown(order: order)
 
                 Text(footnote)
                     .font(.system(size: 12))
@@ -442,38 +442,44 @@ private struct TheirMachine: View {
 }
 
 // MARK: - What this customer weighs
+//
+// Five bars, heaviest first. This is the single most useful thing the
+// card can say: where the money should go. An editor wants a processor
+// and memory; a gamer wants the card. Same budget, completely different
+// right answer.
 
 private struct WeightBreakdown: View {
     let order: CustomerOrder
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("WHAT \(firstName.uppercased()) WEIGHS")
-                .font(.spec(9, .semibold)).tracking(1.1)
-                .foregroundStyle(Theme.muted)
-
-            bar("CPU", order.useCase.cpuWeight, PartCategory.cpu.tint)
-            bar("GPU", order.useCase.gpuWeight, PartCategory.gpu.tint)
-        }
-        .padding(.horizontal, 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 
     private var firstName: String {
         order.name.split(separator: " ").first.map(String.init) ?? order.name
     }
 
-    private func bar(_ label: String, _ weight: Double, _ tint: Color) -> some View {
-        HStack(spacing: 9) {
-            Text(label)
-                .font(.spec(10, .semibold))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("WHAT \(firstName.uppercased()) WEIGHS")
+                .font(.spec(9, .semibold)).tracking(1.1)
                 .foregroundStyle(Theme.muted)
-                .frame(width: 26, alignment: .leading)
+
+            ForEach(order.useCase.weightedSlots, id: \.category) { slot in
+                bar(slot.category, slot.weight)
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func bar(_ category: PartCategory, _ weight: Double) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: category.symbol)
+                .font(.system(size: 9))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 16)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.raised)
-                    Capsule().fill(tint).frame(width: geo.size.width * weight)
+                    Capsule().fill(category.tint).frame(width: geo.size.width * weight)
                 }
             }
             .frame(height: 7)
@@ -484,7 +490,8 @@ private struct WeightBreakdown: View {
                 .frame(width: 34, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label) \(Int((weight * 100).rounded())) percent")
+        .accessibilityLabel("\(category.displayName) "
+                            + "\(Int((weight * 100).rounded())) percent")
     }
 }
 
@@ -565,7 +572,8 @@ private struct StockRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                Text("\(item.part.specSummary) · paid \(item.paidPrice.money)")
+                Text("\(item.part.specSummary) · \(item.part.score) pts "
+                     + "· paid \(item.paidPrice.money)")
                     .font(.spec(10))
                     .foregroundStyle(Theme.muted)
             }

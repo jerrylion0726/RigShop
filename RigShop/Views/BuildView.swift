@@ -10,9 +10,10 @@
 //  against choices somebody else made.
 //
 //  Every number is answered from the customer's point of view, not the
-//  part's. A 45-point graphics card is worth 32 points to a gamer and 9
+//  part's. A 45-point graphics card is worth 25 points to a gamer and 5
 //  to someone doing spreadsheets; the player should never have to do that
-//  multiplication in their head.
+//  multiplication in their head. Every slot contributes, so a starved
+//  memory slot shows its cost right where you can see it.
 //
 
 import SwiftUI
@@ -21,14 +22,8 @@ import SwiftUI
 
 extension Part {
     /// What this part adds to a build's weighted score for this customer.
-    /// Only CPUs and graphics cards contribute; everything else decides
-    /// whether the machine runs at all, not how fast it is.
-    func contribution(for useCase: UseCase) -> Int? {
-        switch category {
-        case .cpu: return Int((Double(score) * useCase.cpuWeight).rounded())
-        case .gpu: return Int((Double(score) * useCase.gpuWeight).rounded())
-        default:   return nil
-        }
+    func contribution(for useCase: UseCase) -> Int {
+        Int((Double(score) * useCase.weight(for: category)).rounded())
     }
 }
 
@@ -384,6 +379,11 @@ private struct SlotRow: View {
         return false
     }
 
+    /// How much this customer's workload leans on this slot, as a percent.
+    private var weightLabel: String {
+        "\(Int((useCase.weight(for: category) * 100).rounded()))%"
+    }
+
     var body: some View {
         Button(action: { if !locked { choose() } }) {
             HStack(spacing: 12) {
@@ -397,6 +397,9 @@ private struct SlotRow: View {
                         Text(category.displayName.uppercased())
                             .font(.spec(8, .semibold)).tracking(1.1)
                             .foregroundStyle(Theme.muted)
+                        Text(weightLabel)
+                            .font(.spec(8, .semibold))
+                            .foregroundStyle(category.tint.opacity(0.85))
                         if locked {
                             Text("THEIRS")
                                 .font(.spec(7, .semibold)).tracking(0.8)
@@ -452,18 +455,14 @@ private struct SlotRow: View {
     private var trailing: some View {
         switch state {
         case .theirs(let part):
-            if let points = part.contribution(for: useCase) {
-                Text("+\(points)")
-                    .font(.spec(13, .semibold))
-                    .foregroundStyle(Theme.muted)
-            }
+            Text("+\(part.contribution(for: useCase))")
+                .font(.spec(13, .semibold))
+                .foregroundStyle(Theme.muted)
         case .yours(let item):
             HStack(spacing: 10) {
-                if let points = item.part.contribution(for: useCase) {
-                    Text("+\(points)")
-                        .font(.spec(14, .semibold))
-                        .foregroundStyle(category.tint)
-                }
+                Text("+\(item.part.contribution(for: useCase))")
+                    .font(.spec(14, .semibold))
+                    .foregroundStyle(category.tint)
                 Button(action: clear) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
