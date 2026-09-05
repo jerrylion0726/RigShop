@@ -3,8 +3,12 @@
 //  RigShop
 //
 //  The bridge between Core/ and Views/. Owns the one mutable copy of
-//  GameState and the random number generator, and exposes the four
-//  verbs as plain methods.
+//  GameState and the random number generator, and exposes the verbs as
+//  plain methods.
+//
+//  It also owns persistence: every action that changes the shop writes
+//  the save immediately. There's no "save" button because forgetting to
+//  press one is not an interesting failure mode.
 //
 //  Nothing in Core/ knows this file exists.
 //
@@ -18,6 +22,9 @@ final class GameStore {
     /// Views read this. Only GameStore mutates it.
     private(set) var state: GameState
 
+    /// True when the state came off disk rather than being freshly rolled.
+    private(set) var loadedFromSave: Bool
+
     /// Kept as a stored property so the sequence continues across days
     /// instead of restarting. Swap in a seeded generator here if you
     /// ever want a "daily challenge" mode where everyone gets the same
@@ -26,16 +33,24 @@ final class GameStore {
     private var rng: RandomNumberGenerator = SystemRandomNumberGenerator()
 
     init() {
-        var generator: RandomNumberGenerator = SystemRandomNumberGenerator()
-        self.state = GameState.newGame(using: &generator)
-        self.rng = generator
+        if let saved = SaveStore.load() {
+            state = saved
+            loadedFromSave = true
+        } else {
+            var generator: RandomNumberGenerator = SystemRandomNumberGenerator()
+            state = GameState.newGame(using: &generator)
+            rng = generator
+            loadedFromSave = false
+        }
     }
 
     // MARK: - Actions
 
     @discardableResult
     func buy(_ listing: MarketListing) -> Bool {
-        state.buy(listing)
+        let ok = state.buy(listing)
+        if ok { persist() }
+        return ok
     }
 
     /// Buy and hand back the unit that landed on the shelf, so the build
@@ -45,27 +60,41 @@ final class GameStore {
     /// cost bases.
     func buyForBuild(_ listing: MarketListing) -> StockItem? {
         guard state.buy(listing) else { return nil }
+        persist()
         return state.inventory.last
     }
 
     @discardableResult
     func sellBack(_ item: StockItem) -> Bool {
-        state.sellBack(item)
+        let ok = state.sellBack(item)
+        if ok { persist() }
+        return ok
     }
 
     func fulfill(orderID: UUID,
                  using stockIDs: [UUID]) -> Result<FulfillmentResult, FulfillmentError> {
-        state.fulfill(orderID: orderID, using: stockIDs)
+        let result = state.fulfill(orderID: orderID, using: stockIDs)
+        if case .success = result { persist() }
+        return result
     }
 
     func advanceDay() {
         state.advanceDay(using: &rng)
+        persist()
     }
 
     func startNewGame() {
         var generator: RandomNumberGenerator = SystemRandomNumberGenerator()
         state = GameState.newGame(using: &generator)
         rng = generator
+        loadedFromSave = false
+        persist()
+    }
+
+    /// Called when the app goes to the background, as a belt-and-braces
+    /// write in case something changed outside the action methods.
+    func persist() {
+        SaveStore.save(state)
     }
 
     // MARK: - Queries the UI asks a lot

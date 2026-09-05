@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		21E886AD304BB69600BD227F /* SaveStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E886AC304BB69600BD227F /* SaveStore.swift */; };
+		21E886AF304BB6E300BD227F /* TitleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E886AE304BB6E300BD227F /* TitleView.swift */; };
 		7C51C96B3024F0400016DB80 /* CustomerFigure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C51C9693024F03F0016DB80 /* CustomerFigure.swift */; };
 		7C51C96C3024F0400016DB80 /* ShopScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C51C96A3024F0400016DB80 /* ShopScene.swift */; };
 		7C51C96E3024F0F10016DB80 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C51C96D3024F0F10016DB80 /* HomeView.swift */; };
@@ -43,6 +45,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		21E886AC304BB69600BD227F /* SaveStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStore.swift; sourceTree = "<group>"; };
+		21E886AE304BB6E300BD227F /* TitleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleView.swift; sourceTree = "<group>"; };
 		7C51C9693024F03F0016DB80 /* CustomerFigure.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomerFigure.swift; sourceTree = "<group>"; };
 		7C51C96A3024F0400016DB80 /* ShopScene.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShopScene.swift; sourceTree = "<group>"; };
 		7C51C96D3024F0F10016DB80 /* HomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -140,6 +144,7 @@
 		7C8CEA9D301FDD3900BE1D20 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				21E886AC304BB69600BD227F /* SaveStore.swift */,
 				7C6BC93C302071C100280B69 /* ShopLevel.swift */,
 				7C6BC930301FF67600280B69 /* GameState.swift */,
 				7C6BC92E301FF3F200280B69 /* OrderGenerator.swift */,
@@ -155,6 +160,7 @@
 		7C8CEA9E301FDD5A00BE1D20 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				21E886AE304BB6E300BD227F /* TitleView.swift */,
 				7C51C96F3025012A0016DB80 /* BuildView.swift */,
 				7C51C9703025012A0016DB80 /* PartPicker.swift */,
 				7C51C96D3024F0F10016DB80 /* HomeView.swift */,
@@ -274,6 +280,7 @@
 				7C6BC923301FED9A00280B69 /* PCBuild.swift in Sources */,
 				7C51C96C3024F0400016DB80 /* ShopScene.swift in Sources */,
 				7C6BC92F301FF3F300280B69 /* OrderGenerator.swift in Sources */,
+				21E886AD304BB69600BD227F /* SaveStore.swift in Sources */,
 				7C6BC9373020654500280B69 /* RootView.swift in Sources */,
 				7C6BC93B302065AC00280B69 /* GameStore.swift in Sources */,
 				7C6BC93D302071C100280B69 /* ShopLevel.swift in Sources */,
@@ -285,6 +292,7 @@
 				7C51C96E3024F0F10016DB80 /* HomeView.swift in Sources */,
 				7C6BC9383020654500280B69 /* ShopView.swift in Sources */,
 				7C6BC922301FED9A00280B69 /* Compatibility.swift in Sources */,
+				21E886AF304BB6E300BD227F /* TitleView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
